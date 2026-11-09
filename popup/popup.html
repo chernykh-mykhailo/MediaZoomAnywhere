@@ -51,6 +51,26 @@
       <input type="range" id="maxZoom" min="2" max="25" step="1" value="15">
     </div>
 
+    <div class="setting-row kbd-section">
+      <div class="kbd-header">
+        <label for="toggleKeyboardZoom" data-i18n="kbdZoomLabel">Keyboard zoom (center):</label>
+        <label class="switch switch-sm">
+          <input type="checkbox" id="toggleKeyboardZoom">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="kbd-bindings" id="kbdBindings" style="display: none;">
+        <div class="kbd-field">
+          <span data-i18n="kbdInLabel">Zoom In</span>
+          <button type="button" id="bindZoomIn" class="kbd-btn">Ctrl + ↑</button>
+        </div>
+        <div class="kbd-field">
+          <span data-i18n="kbdOutLabel">Zoom Out</span>
+          <button type="button" id="bindZoomOut" class="kbd-btn">Ctrl + ↓</button>
+        </div>
+      </div>
+    </div>
+
     <div class="tips">
       <div class="tip-title" data-i18n="controlsTitle">Controls (Windows / Mac):</div>
       <ul>

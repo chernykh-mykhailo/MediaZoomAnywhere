@@ -58,7 +58,7 @@ Built from the ground up for cross-platform workflows:
   - Double-clicking the media;
   - Pressing `Esc`;
   - Navigating to the next slide or closing a modal/lightbox.
-- ⚙️ **Bilingual Popup UI (EN / UK):** Quick enable/disable toggle, language switcher, modifier key selection, zoom speed, and max zoom limit (up to 25x).
+- ⚙️ **Bilingual Popup UI (EN / UK):** Quick enable/disable toggle, language switcher, modifier key selection, zoom speed, max zoom limit (up to 25x), and optional **Keyboard Zoom** with customizable hotkeys (e.g., `Ctrl + ↑ / ↓` zooming into center).
 
 ---
 

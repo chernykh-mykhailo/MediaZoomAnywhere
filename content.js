@@ -7,7 +7,10 @@
     maxZoom: 20.0,
     minZoom: 1.0,
     wheelPanSpeed: 1.0,
-    badgeTimeout: 1200
+    badgeTimeout: 1200,
+    keyboardZoomEnabled: false,
+    kbdZoomIn: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowUp', key: 'ArrowUp' },
+    kbdZoomOut: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowDown', key: 'ArrowDown' }
   };
 
   // Check support for individual transform properties (Chrome 104+)
@@ -15,11 +18,17 @@
 
   // Load saved settings
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get(['enabled', 'modifierKey', 'zoomSpeed', 'maxZoom'], (items) => {
+    chrome.storage.sync.get([
+      'enabled', 'modifierKey', 'zoomSpeed', 'maxZoom',
+      'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut'
+    ], (items) => {
       if (items.enabled !== undefined) config.enabled = items.enabled;
       if (items.modifierKey) config.modifierKey = items.modifierKey;
       if (items.zoomSpeed) config.zoomSpeed = Number(items.zoomSpeed);
       if (items.maxZoom) config.maxZoom = Number(items.maxZoom);
+      if (items.keyboardZoomEnabled !== undefined) config.keyboardZoomEnabled = items.keyboardZoomEnabled;
+      if (items.kbdZoomIn) config.kbdZoomIn = items.kbdZoomIn;
+      if (items.kbdZoomOut) config.kbdZoomOut = items.kbdZoomOut;
     });
 
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -28,6 +37,9 @@
         if (changes.modifierKey) config.modifierKey = changes.modifierKey.newValue;
         if (changes.zoomSpeed) config.zoomSpeed = Number(changes.zoomSpeed.newValue);
         if (changes.maxZoom) config.maxZoom = Number(changes.maxZoom.newValue);
+        if (changes.keyboardZoomEnabled) config.keyboardZoomEnabled = changes.keyboardZoomEnabled.newValue;
+        if (changes.kbdZoomIn) config.kbdZoomIn = changes.kbdZoomIn.newValue;
+        if (changes.kbdZoomOut) config.kbdZoomOut = changes.kbdZoomOut.newValue;
       }
     });
   }
@@ -42,6 +54,8 @@
   let startPanX = 0;
   let startPanY = 0;
   let hasDragged = false;
+  let lastMouseX = -1;
+  let lastMouseY = -1;
 
   // Zoom badge element
   let badgeEl = null;
@@ -552,6 +566,14 @@
     e.stopPropagation();
     e.stopImmediatePropagation();
 
+    const factor = e.deltaY < 0 ? config.zoomSpeed : (1 / config.zoomSpeed);
+    applyZoomStep(targetMedia, factor, e.clientX, e.clientY);
+  }
+
+  // Shared zoom initializer and scaler (focalX/focalY null => zooms into media center)
+  function applyZoomStep(targetMedia, factor, focalX, focalY) {
+    if (!targetMedia) return;
+
     // If target changed, reset previous
     if (activeElement && activeElement !== targetMedia) {
       resetZoom(activeElement);
@@ -592,7 +614,7 @@
       }
       targetMedia.classList.add('mza-zoomed');
 
-      // Lift overflow:hidden on direct container parents for photos (keep player clipping for <video> so it stays neatly inside the player without covering controls)
+      // Lift overflow:hidden on direct container parents for photos
       if (!isVideo) {
         let p = targetMedia.parentElement;
         let depth = 0;
@@ -625,14 +647,15 @@
       observeMediaChanges(targetMedia);
     }
 
-    // Calculate scale factor
-    const factor = e.deltaY < 0 ? config.zoomSpeed : (1 / config.zoomSpeed);
     const prevScale = activeState.scale;
     let nextScale = prevScale * factor;
 
+    const badgeX = focalX !== null ? focalX : activeState.origCenterX;
+    const badgeY = focalY !== null ? focalY : activeState.origCenterY;
+
     if (nextScale <= config.minZoom * 1.02) {
       resetZoom(targetMedia);
-      showBadge('100%', e.clientX, e.clientY);
+      showBadge('100%', badgeX, badgeY);
       return;
     }
 
@@ -642,16 +665,16 @@
 
     const effectiveFactor = nextScale / prevScale;
 
-    // Anchor zoom relative to invariant center and cursor
-    const curX = e.clientX - activeState.origCenterX;
-    const curY = e.clientY - activeState.origCenterY;
+    // Anchor zoom relative to invariant center and focal point (center if keyboard zoom)
+    const curX = focalX !== null ? (focalX - activeState.origCenterX) : 0;
+    const curY = focalY !== null ? (focalY - activeState.origCenterY) : 0;
 
     activeState.panX = curX * (1 - effectiveFactor) + activeState.panX * effectiveFactor;
     activeState.panY = curY * (1 - effectiveFactor) + activeState.panY * effectiveFactor;
     activeState.scale = nextScale;
 
     applyTransform(targetMedia, activeState.scale, activeState.panX, activeState.panY);
-    showBadge(`${Math.round(nextScale * 100)}%`, e.clientX, e.clientY);
+    showBadge(`${Math.round(nextScale * 100)}%`, badgeX, badgeY);
   }
 
   // Pointer & Mouse Down handling
@@ -697,6 +720,9 @@
 
   // Pointer & Mouse Move handling
   function onPointerMove(e) {
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+
     if (!isDragging || !activeElement || !activeState) return;
 
     const dx = e.clientX - dragStartX;
@@ -776,8 +802,51 @@
     resetZoom(activeElement);
   }
 
-  // Key navigation resets zoom
+  function isTypingTarget(el) {
+    if (!el || !(el instanceof Element)) return false;
+    const tag = (el.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+  }
+
+  function matchesKeyCombo(e, combo) {
+    if (!combo) return false;
+    const ctrlMatch = Boolean(combo.ctrl) === Boolean(e.ctrlKey);
+    const altMatch = Boolean(combo.alt) === Boolean(e.altKey);
+    const shiftMatch = Boolean(combo.shift) === Boolean(e.shiftKey);
+    const metaMatch = Boolean(combo.meta) === Boolean(e.metaKey);
+    if (!ctrlMatch || !altMatch || !shiftMatch || !metaMatch) return false;
+
+    if (combo.code && e.code === combo.code) return true;
+    if (combo.key && e.key && e.key.toLowerCase() === combo.key.toLowerCase()) return true;
+    return false;
+  }
+
+  // Keyboard zoom + navigation resets
   function onKeyDown(e) {
+    if (config.enabled && config.keyboardZoomEnabled && !isTypingTarget(e.target)) {
+      const isZoomIn = matchesKeyCombo(e, config.kbdZoomIn);
+      const isZoomOut = !isZoomIn && matchesKeyCombo(e, config.kbdZoomOut);
+
+      if (isZoomIn || isZoomOut) {
+        let target = (activeElement && isVisible(activeElement)) ? activeElement : null;
+        if (!target && lastMouseX >= 0 && lastMouseY >= 0) {
+          target = findTargetMedia({ clientX: lastMouseX, clientY: lastMouseY });
+        }
+        if (!target) {
+          target = findLargestMedia(document);
+        }
+
+        if (target) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          const factor = isZoomIn ? config.zoomSpeed : (1 / config.zoomSpeed);
+          applyZoomStep(target, factor, null, null);
+          return;
+        }
+      }
+    }
+
     if (!activeElement) return;
 
     if (e.key === 'Escape') {
