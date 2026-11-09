@@ -74,10 +74,11 @@
   }
 
   function isModifierPressed(e) {
-    if (config.modifierKey === 'ctrl') return e.ctrlKey;
-    if (config.modifierKey === 'alt') return e.altKey;
+    if (config.modifierKey === 'ctrl') return e.ctrlKey || e.metaKey; // Ctrl на Windows/Linux, або Cmd (⌘) / Ctrl на Mac
+    if (config.modifierKey === 'alt') return e.altKey; // Alt / Option (⌥) на Mac
     if (config.modifierKey === 'shift') return e.shiftKey;
-    return e.ctrlKey;
+    if (config.modifierKey === 'cmd') return e.metaKey;
+    return e.ctrlKey || e.metaKey;
   }
 
   function isVisible(el) {
