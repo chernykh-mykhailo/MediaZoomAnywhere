@@ -21,3 +21,4 @@ We do not sell, rent, trade, or transfer any user data to third parties.
 ## 5. Contact & Source Code
 If you have questions about this Privacy Policy, or want to inspect the source code, please visit:
 [https://github.com/chernykh-mykhailo/MediaZoomAnywhere](https://github.com/chernykh-mykhailo/MediaZoomAnywhere)
+
