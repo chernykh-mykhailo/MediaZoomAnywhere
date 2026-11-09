@@ -182,20 +182,31 @@
       if (!el || !(el instanceof Element)) continue;
       if (
         el.contains(activeElement) &&
-        (el.id === 'movie_player' || el.classList.contains('html5-video-player') || el.classList.contains('video-container'))
+        (el.id === 'movie_player' || el.classList.contains('html5-video-player') || el.classList.contains('video-container') ||
+         String(el.className || '').toLowerCase().includes('player'))
       ) {
         return true;
       }
     }
 
-    // Check strictly inside the active media bounding rect (0 margin so clicking outside unfocuses/resets zoom)
+    // Check inside active media rect OR its original frame rect (so player controls remain valid even when panned!)
     const rect = activeElement.getBoundingClientRect();
-    return (
+    const inActiveRect = (
       e.clientX >= rect.left &&
       e.clientX <= rect.right &&
       e.clientY >= rect.top &&
       e.clientY <= rect.bottom
     );
+    if (inActiveRect) return true;
+
+    if (activeState && activeState.origRect) {
+      const r = activeState.origRect;
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   function isWheelOverActiveMedia(e) {
@@ -223,15 +234,36 @@
     return false;
   }
 
-  // Only real interactive controls (buttons, volume, progress bar) should prevent dragging
+  // Detect real interactive player controls (buttons, bars, sliders, seekbars) so clicks work normally while zoomed
   function isControlElement(target) {
     if (!target || !(target instanceof Element)) return false;
     const tag = (target.tagName || '').toLowerCase();
     if (tag === 'button' || tag === 'input' || tag === 'select' || tag === 'a') return true;
+    if (target.getAttribute && (target.getAttribute('role') === 'button' || target.getAttribute('role') === 'slider')) return true;
 
-    // Bottom controls bar (.ytp-chrome-bottom, .vjs-control-bar, player controls)
-    if (target.closest('.ytp-chrome-bottom, .ytp-chrome-top, .vjs-control-bar, [class*="control-bar"], [class*="progress-bar"], [class*="timeline"]')) {
+    if (target.closest('button, a, input, select, [role="button"], [role="slider"]')) {
       return true;
+    }
+
+    // Compact player control bars (height <= 110px) so we never match a full-player overlay wrapper
+    const controlBar = target.closest(
+      '.ytp-chrome-bottom, .ytp-chrome-top, .vjs-control-bar, .plyr__controls, ' +
+      '[class*="control"], [class*="progress"], [class*="timeline"], [class*="seek"], [class*="volume"], [class*="toolbar"]'
+    );
+    if (controlBar) {
+      const barRect = controlBar.getBoundingClientRect();
+      if (barRect.height > 0 && barRect.height <= 110) {
+        return true;
+      }
+    }
+
+    // Small clickable icons/elements with cursor: pointer
+    if (activeState && activeState.origRect) {
+      const tRect = target.getBoundingClientRect();
+      const isSmall = tRect.width < activeState.origRect.width * 0.5 && tRect.height <= 90;
+      if (isSmall && window.getComputedStyle(target).cursor === 'pointer') {
+        return true;
+      }
     }
 
     return false;
@@ -549,39 +581,45 @@
         overflowParents: []
       };
 
+      const isVideo = targetMedia.tagName && targetMedia.tagName.toLowerCase() === 'video';
       const computed = window.getComputedStyle(targetMedia);
       if (computed.position === 'static') {
         targetMedia.style.position = 'relative';
       }
-      targetMedia.style.zIndex = '2147483646';
+      // Keep <video> below its player control bars so controls remain visible and clickable!
+      if (!isVideo) {
+        targetMedia.style.zIndex = '2147483646';
+      }
       targetMedia.classList.add('mza-zoomed');
 
-      // Lift overflow:hidden on direct container parents (max 5 levels, never touch scrollable containers)
-      let p = targetMedia.parentElement;
-      let depth = 0;
-      while (p && p !== document.body && p !== document.documentElement && depth < 5) {
-        const pStyle = window.getComputedStyle(p);
-        const isScrollableY = (pStyle.overflowY === 'auto' || pStyle.overflowY === 'scroll') && p.scrollHeight > p.clientHeight;
-        const isScrollableX = (pStyle.overflowX === 'auto' || pStyle.overflowX === 'scroll') && p.scrollWidth > p.clientWidth;
+      // Lift overflow:hidden on direct container parents for photos (keep player clipping for <video> so it stays neatly inside the player without covering controls)
+      if (!isVideo) {
+        let p = targetMedia.parentElement;
+        let depth = 0;
+        while (p && p !== document.body && p !== document.documentElement && depth < 5) {
+          const pStyle = window.getComputedStyle(p);
+          const isScrollableY = (pStyle.overflowY === 'auto' || pStyle.overflowY === 'scroll') && p.scrollHeight > p.clientHeight;
+          const isScrollableX = (pStyle.overflowX === 'auto' || pStyle.overflowX === 'scroll') && p.scrollWidth > p.clientWidth;
 
-        const modX = !isScrollableX && pStyle.overflowX === 'hidden';
-        const modY = !isScrollableY && pStyle.overflowY === 'hidden';
+          const modX = !isScrollableX && pStyle.overflowX === 'hidden';
+          const modY = !isScrollableY && pStyle.overflowY === 'hidden';
 
-        if (modX || modY) {
-          activeState.overflowParents.push({
-            el: p,
-            modX: modX,
-            modY: modY,
-            prevOverflowX: p.style.overflowX,
-            prevOverflowXPriority: p.style.getPropertyPriority('overflow-x'),
-            prevOverflowY: p.style.overflowY,
-            prevOverflowYPriority: p.style.getPropertyPriority('overflow-y')
-          });
-          if (modX) p.style.setProperty('overflow-x', 'visible', 'important');
-          if (modY) p.style.setProperty('overflow-y', 'visible', 'important');
+          if (modX || modY) {
+            activeState.overflowParents.push({
+              el: p,
+              modX: modX,
+              modY: modY,
+              prevOverflowX: p.style.overflowX,
+              prevOverflowXPriority: p.style.getPropertyPriority('overflow-x'),
+              prevOverflowY: p.style.overflowY,
+              prevOverflowYPriority: p.style.getPropertyPriority('overflow-y')
+            });
+            if (modX) p.style.setProperty('overflow-x', 'visible', 'important');
+            if (modY) p.style.setProperty('overflow-y', 'visible', 'important');
+          }
+          p = p.parentElement;
+          depth++;
         }
-        p = p.parentElement;
-        depth++;
       }
 
       observeMediaChanges(targetMedia);
@@ -628,8 +666,17 @@
 
     if (e.button !== 0 && e.button !== 1) return;
 
-    // Allow user to click real video controls without dragging
+    // Allow user to click real video controls (or native HTML5 video controls bar at bottom) without dragging
     if (isControlElement(e.target)) {
+      return;
+    }
+    if (
+      activeElement.tagName &&
+      activeElement.tagName.toLowerCase() === 'video' &&
+      activeElement.hasAttribute('controls') &&
+      activeState.origRect &&
+      e.clientY >= activeState.origRect.bottom - 55
+    ) {
       return;
     }
 
