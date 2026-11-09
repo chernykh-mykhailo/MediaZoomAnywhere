@@ -188,7 +188,14 @@
       }
     }
 
-    return isCursorNearElement(activeElement, e.clientX, e.clientY, 80);
+    // Check strictly inside the active media bounding rect (0 margin so clicking outside unfocuses/resets zoom)
+    const rect = activeElement.getBoundingClientRect();
+    return (
+      e.clientX >= rect.left &&
+      e.clientX <= rect.right &&
+      e.clientY >= rect.top &&
+      e.clientY <= rect.bottom
+    );
   }
 
   function isWheelOverActiveMedia(e) {
@@ -612,6 +619,13 @@
   // Pointer & Mouse Down handling
   function onPointerDown(e) {
     if (!activeElement || !activeState || activeState.scale <= 1.0) return;
+
+    // Clicking anywhere outside the zoomed media/player unfocuses and resets zoom immediately
+    if (!isEventOnActiveMedia(e)) {
+      resetZoom(activeElement);
+      return;
+    }
+
     if (e.button !== 0 && e.button !== 1) return;
 
     // Allow user to click real video controls without dragging
@@ -619,21 +633,19 @@
       return;
     }
 
-    if (isEventOnActiveMedia(e)) {
-      isDragging = true;
-      hasDragged = false;
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      startPanX = activeState.panX;
-      startPanY = activeState.panY;
+    isDragging = true;
+    hasDragged = false;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    startPanX = activeState.panX;
+    startPanY = activeState.panY;
 
-      activeElement.classList.add('mza-dragging');
-      document.documentElement.classList.add('mza-dragging-active');
+    activeElement.classList.add('mza-dragging');
+    document.documentElement.classList.add('mza-dragging-active');
 
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-    }
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
   }
 
   // Pointer & Mouse Move handling
