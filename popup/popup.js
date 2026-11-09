@@ -6,6 +6,7 @@ const translations = {
     optShift: 'Shift',
     zoomSpeedLabel: 'Zoom speed:',
     maxZoomLabel: 'Max zoom:',
+    hideScrollbarsLabel: 'Hide scrollbars when zoomed:',
     kbdZoomLabel: 'Keyboard zoom (center):',
     kbdInLabel: 'Zoom In',
     kbdOutLabel: 'Zoom Out',
@@ -26,6 +27,7 @@ const translations = {
     optShift: 'Shift',
     zoomSpeedLabel: 'Швидкість зуму:',
     maxZoomLabel: 'Максимальний зум:',
+    hideScrollbarsLabel: 'Приховувати скрол при зумі:',
     kbdZoomLabel: 'Зум з клавіатури (у центр):',
     kbdInLabel: 'Наблизити',
     kbdOutLabel: 'Віддалити',
@@ -75,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const zoomSpeedVal = document.getElementById('zoomSpeedVal');
   const maxZoom = document.getElementById('maxZoom');
   const maxZoomVal = document.getElementById('maxZoomVal');
+  const toggleHideScrollbars = document.getElementById('toggleHideScrollbars');
   const toggleKeyboardZoom = document.getElementById('toggleKeyboardZoom');
   const kbdBindings = document.getElementById('kbdBindings');
   const bindZoomIn = document.getElementById('bindZoomIn');
@@ -136,6 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
     zoomSpeed: 1.15,
     maxZoom: 15,
     language: defaultLang,
+    hideScrollbars: true,
     keyboardZoomEnabled: false,
     kbdZoomIn: defaultKbdIn,
     kbdZoomOut: defaultKbdOut
@@ -146,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
     zoomSpeedVal.textContent = `${Math.round((items.zoomSpeed - 1) * 100)}%`;
     maxZoom.value = items.maxZoom;
     maxZoomVal.textContent = `${items.maxZoom}x`;
+    toggleHideScrollbars.checked = items.hideScrollbars;
     toggleKeyboardZoom.checked = items.keyboardZoomEnabled;
     kbdBindings.style.display = items.keyboardZoomEnabled ? 'grid' : 'none';
     currentKbdIn = items.kbdZoomIn || defaultKbdIn;
@@ -178,6 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const val = Number(maxZoom.value);
     maxZoomVal.textContent = `${val}x`;
     chrome.storage.sync.set({ maxZoom: val });
+  });
+
+  toggleHideScrollbars.addEventListener('change', () => {
+    chrome.storage.sync.set({ hideScrollbars: toggleHideScrollbars.checked });
   });
 
   toggleKeyboardZoom.addEventListener('change', () => {

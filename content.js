@@ -8,6 +8,7 @@
     minZoom: 1.0,
     wheelPanSpeed: 1.0,
     badgeTimeout: 1200,
+    hideScrollbars: true,
     keyboardZoomEnabled: false,
     kbdZoomIn: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowUp', key: 'ArrowUp' },
     kbdZoomOut: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowDown', key: 'ArrowDown' }
@@ -16,16 +17,25 @@
   // Check support for individual transform properties (Chrome 104+)
   const supportsIndependentTransforms = ('scale' in document.documentElement.style && 'translate' in document.documentElement.style);
 
+  function updateScrollbarState(isZoomed) {
+    if (isZoomed && config.hideScrollbars) {
+      document.documentElement.classList.add('mza-hide-scrollbars');
+    } else {
+      document.documentElement.classList.remove('mza-hide-scrollbars');
+    }
+  }
+
   // Load saved settings
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
     chrome.storage.sync.get([
       'enabled', 'modifierKey', 'zoomSpeed', 'maxZoom',
-      'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut'
+      'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut'
     ], (items) => {
       if (items.enabled !== undefined) config.enabled = items.enabled;
       if (items.modifierKey) config.modifierKey = items.modifierKey;
       if (items.zoomSpeed) config.zoomSpeed = Number(items.zoomSpeed);
       if (items.maxZoom) config.maxZoom = Number(items.maxZoom);
+      if (items.hideScrollbars !== undefined) config.hideScrollbars = items.hideScrollbars;
       if (items.keyboardZoomEnabled !== undefined) config.keyboardZoomEnabled = items.keyboardZoomEnabled;
       if (items.kbdZoomIn) config.kbdZoomIn = items.kbdZoomIn;
       if (items.kbdZoomOut) config.kbdZoomOut = items.kbdZoomOut;
@@ -37,6 +47,10 @@
         if (changes.modifierKey) config.modifierKey = changes.modifierKey.newValue;
         if (changes.zoomSpeed) config.zoomSpeed = Number(changes.zoomSpeed.newValue);
         if (changes.maxZoom) config.maxZoom = Number(changes.maxZoom.newValue);
+        if (changes.hideScrollbars) {
+          config.hideScrollbars = changes.hideScrollbars.newValue;
+          updateScrollbarState(Boolean(activeElement && activeState && activeState.scale > 1.0));
+        }
         if (changes.keyboardZoomEnabled) config.keyboardZoomEnabled = changes.keyboardZoomEnabled.newValue;
         if (changes.kbdZoomIn) config.kbdZoomIn = changes.kbdZoomIn.newValue;
         if (changes.kbdZoomOut) config.kbdZoomOut = changes.kbdZoomOut.newValue;
@@ -426,6 +440,7 @@
     }
 
     document.documentElement.classList.remove('mza-dragging-active');
+    updateScrollbarState(false);
     target.classList.remove('mza-zoomed', 'mza-dragging');
 
     if (activeState && activeState.originalStyles) {
@@ -673,6 +688,7 @@
     activeState.panY = curY * (1 - effectiveFactor) + activeState.panY * effectiveFactor;
     activeState.scale = nextScale;
 
+    updateScrollbarState(true);
     applyTransform(targetMedia, activeState.scale, activeState.panX, activeState.panY);
     showBadge(`${Math.round(nextScale * 100)}%`, badgeX, badgeY);
   }

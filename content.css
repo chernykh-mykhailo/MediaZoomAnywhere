@@ -20,6 +20,22 @@
   user-select: none !important;
 }
 
+/* Hide browser/container scrollbars while zoomed */
+html.mza-hide-scrollbars,
+html.mza-hide-scrollbars body,
+html.mza-hide-scrollbars * {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+html.mza-hide-scrollbars::-webkit-scrollbar,
+html.mza-hide-scrollbars body::-webkit-scrollbar,
+html.mza-hide-scrollbars *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 /* Subtle zoom level badge */
 .mza-zoom-badge {
   position: fixed;
