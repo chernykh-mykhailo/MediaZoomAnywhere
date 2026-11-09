@@ -6,6 +6,7 @@
     zoomSpeed: 1.15,
     maxZoom: 20.0,
     minZoom: 1.0,
+    wheelPanSpeed: 1.0,
     badgeTimeout: 1200
   };
 
@@ -170,36 +171,41 @@
     if (!activeElement || !document.contains(activeElement)) return false;
     const path = e.composedPath ? e.composedPath() : [];
     if (path.includes(activeElement)) return true;
-    return isCursorNearElement(activeElement, e.clientX, e.clientY, 30);
+    return isCursorNearElement(activeElement, e.clientX, e.clientY, 50);
   }
 
+  // Only genuine interactive control buttons or scrubber tracks are treated as controls
   function isControlElement(target) {
     if (!target || !(target instanceof Element)) return false;
     const tag = (target.tagName || '').toLowerCase();
     if (tag === 'button' || tag === 'input' || tag === 'select' || tag === 'a') return true;
     if (target.getAttribute && target.getAttribute('role') === 'button') return true;
-    if (target.closest('button, input, select, [role="button"], [class*="control"], [class*="progress"], [class*="timeline"], [class*="volume"]')) {
-      return true;
-    }
+
+    // Tight check for actual button or slider element, NOT broad parent containers
+    const btn = target.closest('button, [role="button"], input[type="range"]');
+    if (btn) return true;
+
+    const scrubber = target.closest('[class*="scrub"], [class*="progress-bar"], [class*="seek-bar"], [class*="volume-slider"]');
+    if (scrubber) return true;
+
     return false;
   }
 
-  // Priority search for media: gives highest priority to <video> when hovering over players
+  // Priority search for media
   function findTargetMedia(e) {
     const x = e.clientX;
     const y = e.clientY;
 
     // 1. If currently zoomed in, keep active element if cursor is on or near it
     if (activeElement && activeState && activeState.scale > 1.0) {
-      if (isCursorNearElement(activeElement, x, y, 100)) {
+      if (isCursorNearElement(activeElement, x, y, 120)) {
         return activeElement;
       }
     }
 
     const elements = document.elementsFromPoint(x, y) || [];
 
-    // 2. VIDEO PRIORITY: Check if any element under cursor is or contains a <video>
-    // Video players typically place transparent click-catchers or controls over the video
+    // 2. VIDEO PRIORITY: Check direct <video> under cursor
     for (const el of elements) {
       if (el.tagName && el.tagName.toLowerCase() === 'video' && isVisible(el)) {
         return el;
@@ -218,7 +224,7 @@
       }
     }
 
-    // Check if any element under cursor contains a <video> (e.g. hovering over video player container or overlay)
+    // Check if any element under cursor contains a <video> (e.g. video player overlay)
     for (const el of elements) {
       if (el === document.body || el === document.documentElement) continue;
       const vid = el.querySelector('video');
@@ -234,7 +240,6 @@
       }
     }
 
-    // Check composed path for other media
     for (const el of path) {
       if (!el || !(el instanceof Element)) continue;
       if (isMediaNode(el) && isVisible(el)) {
@@ -366,7 +371,6 @@
 
   function applyTransform(el, scale, panX, panY) {
     if (supportsIndependentTransforms) {
-      // Modern CSS scale and translate properties preserve existing transforms (e.g. translate(-50%, -50%))
       el.style.scale = `${scale.toFixed(3)}`;
       el.style.translate = `${panX.toFixed(2)}px ${panY.toFixed(2)}px`;
     } else {
@@ -391,7 +395,6 @@
             return;
           }
         } else if (m.type === 'childList') {
-          // If <source> elements inside <video> changed
           for (const node of m.addedNodes) {
             if (node.tagName && node.tagName.toLowerCase() === 'source') {
               resetZoom(el);
@@ -413,18 +416,36 @@
   function onWheel(e) {
     if (!config.enabled) return;
 
-    // Normal wheel without modifier: reset active zoom cleanly to allow normal slide transition
+    // SCENARIO 1: NORMAL WHEEL WITHOUT MODIFIER
+    // When already zoomed in (> 100%), scrolling the wheel allows panning vertically/horizontally
+    // to smoothly move the focus higher/lower on the media!
     if (!isModifierPressed(e)) {
       if (activeElement && activeState && activeState.scale > 1.0) {
-        resetZoom(activeElement);
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        if (e.shiftKey) {
+          // Horizontal pan with Shift
+          activeState.panX -= (e.deltaY || e.deltaX) * config.wheelPanSpeed;
+        } else {
+          // Vertical pan to move focus higher / lower
+          activeState.panY -= e.deltaY * config.wheelPanSpeed;
+          if (e.deltaX) {
+            activeState.panX -= e.deltaX * config.wheelPanSpeed;
+          }
+        }
+
+        applyTransform(activeElement, activeState.scale, activeState.panX, activeState.panY);
+        return;
       }
-      return;
+      return; // If not zoomed in, let normal wheel scroll/flip slides as usual
     }
 
+    // SCENARIO 2: MODIFIER (Ctrl) + WHEEL: ZOOM IN / OUT
     const targetMedia = findTargetMedia(e);
     if (!targetMedia) return;
 
-    // Intercept event
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
@@ -444,7 +465,6 @@
         baseTransform = currentTransform;
       }
 
-      // Record invariant initial center of the element before zooming
       const initRect = targetMedia.getBoundingClientRect();
 
       activeState = {
@@ -513,7 +533,7 @@
     if (!activeElement || !activeState || activeState.scale <= 1.0) return;
     if (e.button !== 0 && e.button !== 1) return;
 
-    // Allow user to click video controls (play/pause, volume, timeline) without dragging
+    // Allow user to click real video controls (play/pause, volume, timeline scrubber) without dragging
     if (isControlElement(e.target)) {
       return;
     }
@@ -528,7 +548,6 @@
 
       activeElement.classList.add('mza-dragging');
 
-      // Prevent website slider/lightbox from receiving drag/swipe gesture
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -628,7 +647,6 @@
   window.addEventListener('wheel', onWheel, { capture: true, passive: false });
   document.addEventListener('wheel', onWheel, { capture: true, passive: false });
 
-  // Both pointer events and mouse events to fully isolate gestures from site swipers
   window.addEventListener('pointerdown', onPointerDown, { capture: true });
   window.addEventListener('pointermove', onPointerMove, { capture: true });
   window.addEventListener('pointerup', onPointerUp, { capture: true });
