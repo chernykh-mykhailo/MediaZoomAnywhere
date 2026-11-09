@@ -172,7 +172,7 @@
     const path = e.composedPath ? e.composedPath() : [];
     if (path.includes(activeElement)) return true;
 
-    // Check if event target is inside player container of activeElement (e.g. YouTube #movie_player)
+    // Check if event target is inside player container of activeElement (e.g. #movie_player / .video-container)
     for (const el of path) {
       if (!el || !(el instanceof Element)) continue;
       if (
@@ -192,7 +192,7 @@
     const tag = (target.tagName || '').toLowerCase();
     if (tag === 'button' || tag === 'input' || tag === 'select' || tag === 'a') return true;
 
-    // Bottom controls bar (YouTube .ytp-chrome-bottom, player controls)
+    // Bottom controls bar (.ytp-chrome-bottom, .vjs-control-bar, player controls)
     if (target.closest('.ytp-chrome-bottom, .ytp-chrome-top, .vjs-control-bar, [class*="control-bar"], [class*="progress-bar"], [class*="timeline"]')) {
       return true;
     }
@@ -233,7 +233,7 @@
       }
     }
 
-    // Check if any element under cursor contains a <video> (e.g. YouTube video player overlay)
+    // Check if any element under cursor contains a <video> (e.g. video player overlay)
     for (const el of elements) {
       if (el === document.body || el === document.documentElement) continue;
       const vid = el.querySelector('video');
@@ -498,7 +498,7 @@
       targetMedia.style.zIndex = '2147483646';
       targetMedia.classList.add('mza-zoomed');
 
-      // Lift overflow:hidden on parents with !important to defeat YouTube/player styles
+      // Lift overflow:hidden on parents with !important to defeat player/slider container styles
       let p = targetMedia.parentElement;
       while (p && p !== document.body && p !== document.documentElement) {
         const pStyle = window.getComputedStyle(p);
@@ -655,7 +655,7 @@
       return;
     }
 
-    // Only reset on gallery navigation keys if not in a video player (to avoid breaking YouTube arrow seeking)
+    // Only reset on gallery navigation keys if not in a video player (to avoid breaking arrow seeking)
     if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'video') {
       return;
     }
