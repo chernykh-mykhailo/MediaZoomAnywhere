@@ -82,7 +82,12 @@
   }
 
   function isVisible(el) {
-    if (!el || !(el instanceof Element)) return false;
+    if (!el || !(el instanceof Element) || !document.contains(el)) return false;
+    if (typeof el.checkVisibility === 'function') {
+      if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
+        return false;
+      }
+    }
     const rect = el.getBoundingClientRect();
     if (rect.width < 10 || rect.height < 10) return false;
     const style = window.getComputedStyle(el);
@@ -184,6 +189,31 @@
     }
 
     return isCursorNearElement(activeElement, e.clientX, e.clientY, 80);
+  }
+
+  function isWheelOverActiveMedia(e) {
+    if (!activeElement || !activeState) return false;
+    const path = e.composedPath ? e.composedPath() : [];
+    if (path.includes(activeElement)) return true;
+
+    for (const el of path) {
+      if (!el || !(el instanceof Element)) continue;
+      if (
+        el.contains(activeElement) &&
+        (el.id === 'movie_player' || el.classList.contains('html5-video-player') || el.classList.contains('video-container'))
+      ) {
+        return true;
+      }
+    }
+
+    if (activeState.origRect) {
+      const r = activeState.origRect;
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   // Only real interactive controls (buttons, volume, progress bar) should prevent dragging
@@ -367,10 +397,19 @@
     // Restore overflow on parents using setProperty / removeProperty with priority
     if (activeState && activeState.overflowParents) {
       for (const item of activeState.overflowParents) {
-        if (item.prevOverflow) {
-          item.el.style.setProperty('overflow', item.prevOverflow, item.prevPriority || '');
-        } else {
-          item.el.style.removeProperty('overflow');
+        if (item.modX) {
+          if (item.prevOverflowX) {
+            item.el.style.setProperty('overflow-x', item.prevOverflowX, item.prevOverflowXPriority || '');
+          } else {
+            item.el.style.removeProperty('overflow-x');
+          }
+        }
+        if (item.modY) {
+          if (item.prevOverflowY) {
+            item.el.style.setProperty('overflow-y', item.prevOverflowY, item.prevOverflowYPriority || '');
+          } else {
+            item.el.style.removeProperty('overflow-y');
+          }
         }
       }
     }
@@ -433,9 +472,20 @@
 
     // SCENARIO 1: NORMAL WHEEL WITHOUT MODIFIER
     // When already zoomed in (> 100%), scrolling the wheel allows panning vertically/horizontally
-    // to smoothly move the focus higher/lower on the media!
+    // ONLY when cursor is actually over the zoomed media!
     if (!isModifierPressed(e)) {
       if (activeElement && activeState && activeState.scale > 1.0) {
+        // Auto-reset if media was detached or hidden (e.g. modal closed)
+        if (!document.contains(activeElement) || !isVisible(activeElement)) {
+          resetZoom(activeElement);
+          return;
+        }
+
+        // Only intercept wheel if cursor is over the zoomed media/player; otherwise let the webpage scroll normally!
+        if (!isWheelOverActiveMedia(e)) {
+          return;
+        }
+
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -484,6 +534,7 @@
         scale: 1.0,
         panX: 0,
         panY: 0,
+        origRect: initRect,
         origCenterX: initRect.left + initRect.width / 2,
         origCenterY: initRect.top + initRect.height / 2,
         baseTransform: baseTransform,
@@ -498,21 +549,32 @@
       targetMedia.style.zIndex = '2147483646';
       targetMedia.classList.add('mza-zoomed');
 
-      // Lift overflow:hidden on parents with !important to defeat player/slider container styles
+      // Lift overflow:hidden on direct container parents (max 5 levels, never touch scrollable containers)
       let p = targetMedia.parentElement;
-      while (p && p !== document.body && p !== document.documentElement) {
+      let depth = 0;
+      while (p && p !== document.body && p !== document.documentElement && depth < 5) {
         const pStyle = window.getComputedStyle(p);
-        if (pStyle.overflow === 'hidden' || pStyle.overflowX === 'hidden' || pStyle.overflowY === 'hidden') {
+        const isScrollableY = (pStyle.overflowY === 'auto' || pStyle.overflowY === 'scroll') && p.scrollHeight > p.clientHeight;
+        const isScrollableX = (pStyle.overflowX === 'auto' || pStyle.overflowX === 'scroll') && p.scrollWidth > p.clientWidth;
+
+        const modX = !isScrollableX && pStyle.overflowX === 'hidden';
+        const modY = !isScrollableY && pStyle.overflowY === 'hidden';
+
+        if (modX || modY) {
           activeState.overflowParents.push({
             el: p,
-            prevOverflow: p.style.overflow,
-            prevPriority: p.style.getPropertyPriority('overflow')
+            modX: modX,
+            modY: modY,
+            prevOverflowX: p.style.overflowX,
+            prevOverflowXPriority: p.style.getPropertyPriority('overflow-x'),
+            prevOverflowY: p.style.overflowY,
+            prevOverflowYPriority: p.style.getPropertyPriority('overflow-y')
           });
-          p.style.setProperty('overflow', 'visible', 'important');
-          p.style.setProperty('overflow-x', 'visible', 'important');
-          p.style.setProperty('overflow-y', 'visible', 'important');
+          if (modX) p.style.setProperty('overflow-x', 'visible', 'important');
+          if (modY) p.style.setProperty('overflow-y', 'visible', 'important');
         }
         p = p.parentElement;
+        depth++;
       }
 
       observeMediaChanges(targetMedia);
@@ -622,7 +684,7 @@
       return;
     }
 
-    // Only reset if clicked an explicit next/prev slide or close button, NOT the video player
+    // Reset if clicked explicit next/prev slide, OR if media was hidden/closed by the click
     if (activeElement && activeState && activeState.scale > 1.0) {
       const clickedEl = e.target;
       if (clickedEl !== activeElement && !activeElement.contains(clickedEl)) {
@@ -630,11 +692,20 @@
         if (
           cls.includes('swiper-button') || cls.includes('slick-arrow') ||
           cls.includes('pswp__button--arrow') || cls.includes('gallery-next') ||
-          cls.includes('gallery-prev')
+          cls.includes('gallery-prev') || cls.includes('close')
         ) {
           resetZoom(activeElement);
+          return;
         }
       }
+
+      // Check shortly after click in case the click closed a lightbox/modal
+      const prevEl = activeElement;
+      setTimeout(() => {
+        if (activeElement === prevEl && (!document.contains(prevEl) || !isVisible(prevEl))) {
+          resetZoom(prevEl);
+        }
+      }, 60);
     }
   }
 
@@ -666,6 +737,19 @@
     }
   }
 
+  // Clear stuck drag states on Alt+Tab or window blur
+  function onWindowBlur() {
+    isDragging = false;
+    hasDragged = false;
+    document.documentElement.classList.remove('mza-dragging-active');
+    if (activeElement) {
+      activeElement.classList.remove('mza-dragging');
+      if (!document.contains(activeElement) || !isVisible(activeElement)) {
+        resetZoom(activeElement);
+      }
+    }
+  }
+
   // Listeners with capture phase
   window.addEventListener('wheel', onWheel, { capture: true, passive: false });
   document.addEventListener('wheel', onWheel, { capture: true, passive: false });
@@ -681,4 +765,8 @@
   window.addEventListener('click', onClick, { capture: true });
   window.addEventListener('dblclick', onDoubleClick, { capture: true });
   window.addEventListener('keydown', onKeyDown, { capture: true });
+  window.addEventListener('blur', onWindowBlur);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) onWindowBlur();
+  });
 })();
