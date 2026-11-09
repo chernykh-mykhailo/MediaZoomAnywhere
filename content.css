@@ -1,9 +1,10 @@
 /* Media Zoom Anywhere styles */
 .mza-zoomed {
-  transition: transform 0.05s ease-out !important;
+  transition: scale 0.05s ease-out, translate 0.05s ease-out, transform 0.05s ease-out !important;
   transform-origin: center center !important;
-  will-change: transform !important;
+  will-change: scale, translate, transform !important;
   cursor: grab !important;
+  pointer-events: auto !important;
 }
 
 .mza-zoomed.mza-dragging {
@@ -37,4 +38,3 @@
   opacity: 1;
   transform: translateY(0);
 }
-

@@ -9,6 +9,9 @@
     badgeTimeout: 1200
   };
 
+  // Check support for individual transform properties (Chrome 104+)
+  const supportsIndependentTransforms = ('scale' in document.documentElement.style && 'translate' in document.documentElement.style);
+
   // Load saved settings
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
     chrome.storage.sync.get(['enabled', 'modifierKey', 'zoomSpeed', 'maxZoom'], (items) => {
@@ -119,11 +122,18 @@
       className.includes('carousel') ||
       className.includes('slider') ||
       className.includes('swiper') ||
+      className.includes('player') ||
       className.includes('pswp')
     );
   }
 
   function findLargestMedia(container = document) {
+    // Check videos first in container
+    const videos = container.querySelectorAll('video');
+    for (const v of videos) {
+      if (isVisible(v)) return v;
+    }
+
     const list = container.querySelectorAll('video, img, canvas');
     let best = null;
     let maxArea = 0;
@@ -163,7 +173,18 @@
     return isCursorNearElement(activeElement, e.clientX, e.clientY, 30);
   }
 
-  // Find target media for wheel event
+  function isControlElement(target) {
+    if (!target || !(target instanceof Element)) return false;
+    const tag = (target.tagName || '').toLowerCase();
+    if (tag === 'button' || tag === 'input' || tag === 'select' || tag === 'a') return true;
+    if (target.getAttribute && target.getAttribute('role') === 'button') return true;
+    if (target.closest('button, input, select, [role="button"], [class*="control"], [class*="progress"], [class*="timeline"], [class*="volume"]')) {
+      return true;
+    }
+    return false;
+  }
+
+  // Priority search for media: gives highest priority to <video> when hovering over players
   function findTargetMedia(e) {
     const x = e.clientX;
     const y = e.clientY;
@@ -177,30 +198,58 @@
 
     const elements = document.elementsFromPoint(x, y) || [];
 
-    // 2. Direct tag match under cursor
+    // 2. VIDEO PRIORITY: Check if any element under cursor is or contains a <video>
+    // Video players typically place transparent click-catchers or controls over the video
+    for (const el of elements) {
+      if (el.tagName && el.tagName.toLowerCase() === 'video' && isVisible(el)) {
+        return el;
+      }
+    }
+
+    // Check composed path for <video> (pierces shadow DOM / custom player web components)
+    const path = e.composedPath ? e.composedPath() : [];
+    for (const el of path) {
+      if (el && el.tagName && el.tagName.toLowerCase() === 'video' && isVisible(el)) {
+        return el;
+      }
+      if (el && el.shadowRoot) {
+        const vid = el.shadowRoot.querySelector('video');
+        if (vid && isVisible(vid)) return vid;
+      }
+    }
+
+    // Check if any element under cursor contains a <video> (e.g. hovering over video player container or overlay)
+    for (const el of elements) {
+      if (el === document.body || el === document.documentElement) continue;
+      const vid = el.querySelector('video');
+      if (vid && isVisible(vid) && isCursorNearElement(vid, x, y)) {
+        return vid;
+      }
+    }
+
+    // 3. Direct tag match (img, canvas, picture)
     for (const el of elements) {
       if (isMediaNode(el) && isVisible(el)) {
         return resolveMediaNode(el);
       }
     }
 
-    // 3. Composed path check
-    const path = e.composedPath ? e.composedPath() : [];
+    // Check composed path for other media
     for (const el of path) {
       if (!el || !(el instanceof Element)) continue;
       if (isMediaNode(el) && isVisible(el)) {
         return resolveMediaNode(el);
       }
       if (el.shadowRoot) {
-        const shadowChild = el.shadowRoot.querySelector('video, img, canvas');
+        const shadowChild = el.shadowRoot.querySelector('img, canvas');
         if (shadowChild && isVisible(shadowChild)) return shadowChild;
       }
     }
 
-    // 4. Element containing media child
+    // 4. Element containing an image child
     for (const el of elements) {
       if (el === document.body || el === document.documentElement) continue;
-      const child = el.querySelector('video, img, canvas');
+      const child = el.querySelector('img, canvas');
       if (child && isVisible(child) && isCursorNearElement(child, x, y)) {
         return resolveMediaNode(child);
       }
@@ -211,7 +260,10 @@
       if (el === document.body || el === document.documentElement) continue;
       const parent = el.parentElement;
       if (parent && parent !== document.body && parent !== document.documentElement) {
-        const siblingMedia = parent.querySelector('video, img, canvas');
+        const vid = parent.querySelector('video');
+        if (vid && isVisible(vid) && isCursorNearElement(vid, x, y)) return vid;
+
+        const siblingMedia = parent.querySelector('img, canvas');
         if (siblingMedia && isVisible(siblingMedia) && isCursorNearElement(siblingMedia, x, y)) {
           return resolveMediaNode(siblingMedia);
         }
@@ -223,7 +275,7 @@
       if (hasBackgroundImage(el)) return el;
     }
 
-    // 7. Modal container under cursor
+    // 7. Modal or player container under cursor
     for (const el of elements) {
       if (isModalElement(el)) {
         const modalMedia = findLargestMedia(el);
@@ -257,10 +309,13 @@
 
   function saveOriginalStyles(el) {
     return {
+      scale: el.style.scale,
+      translate: el.style.translate,
       transform: el.style.transform,
       transformOrigin: el.style.transformOrigin,
       zIndex: el.style.zIndex,
-      position: el.style.position
+      position: el.style.position,
+      pointerEvents: el.style.pointerEvents
     };
   }
 
@@ -275,21 +330,28 @@
 
     target.classList.remove('mza-zoomed', 'mza-dragging');
     if (activeState && activeState.originalStyles) {
-      target.style.transform = activeState.originalStyles.transform;
-      target.style.transformOrigin = activeState.originalStyles.transformOrigin;
-      target.style.zIndex = activeState.originalStyles.zIndex;
-      target.style.position = activeState.originalStyles.position;
+      const orig = activeState.originalStyles;
+      target.style.scale = orig.scale || '';
+      target.style.translate = orig.translate || '';
+      target.style.transform = orig.transform || '';
+      target.style.transformOrigin = orig.transformOrigin || '';
+      target.style.zIndex = orig.zIndex || '';
+      target.style.position = orig.position || '';
+      target.style.pointerEvents = orig.pointerEvents || '';
     } else {
+      target.style.scale = '';
+      target.style.translate = '';
       target.style.transform = '';
       target.style.transformOrigin = '';
       target.style.zIndex = '';
       target.style.position = '';
+      target.style.pointerEvents = '';
     }
 
     // Restore overflow on parents
     if (activeState && activeState.overflowParents) {
-      for (const parent of activeState.overflowParents) {
-        parent.style.overflow = '';
+      for (const item of activeState.overflowParents) {
+        item.el.style.overflow = item.prevOverflow;
       }
     }
 
@@ -303,8 +365,14 @@
   }
 
   function applyTransform(el, scale, panX, panY) {
-    const baseTransform = activeState && activeState.baseTransform ? `${activeState.baseTransform} ` : '';
-    el.style.transform = `${baseTransform}translate(${panX.toFixed(2)}px, ${panY.toFixed(2)}px) scale(${scale.toFixed(3)})`;
+    if (supportsIndependentTransforms) {
+      // Modern CSS scale and translate properties preserve existing transforms (e.g. translate(-50%, -50%))
+      el.style.scale = `${scale.toFixed(3)}`;
+      el.style.translate = `${panX.toFixed(2)}px ${panY.toFixed(2)}px`;
+    } else {
+      const base = activeState && activeState.baseTransform ? `${activeState.baseTransform} ` : '';
+      el.style.transform = `${base}translate(${panX.toFixed(2)}px, ${panY.toFixed(2)}px) scale(${scale.toFixed(3)})`;
+    }
   }
 
   // Observe media src changes to reset zoom when changing slides
@@ -318,23 +386,30 @@
       for (const m of mutations) {
         if (m.type === 'attributes') {
           const attr = m.attributeName;
-          // ONLY reset when the media source actually changes
           if (attr === 'src' || attr === 'srcset' || attr === 'poster' || attr === 'data-src') {
             resetZoom(el);
             return;
+          }
+        } else if (m.type === 'childList') {
+          // If <source> elements inside <video> changed
+          for (const node of m.addedNodes) {
+            if (node.tagName && node.tagName.toLowerCase() === 'source') {
+              resetZoom(el);
+              return;
+            }
           }
         }
       }
     });
 
-    // NOTE: We deliberately do NOT observe 'style' or 'class' here to avoid reacting to our own transforms
     mediaObserver.observe(el, {
       attributes: true,
-      attributeFilter: ['src', 'srcset', 'poster', 'data-src']
+      attributeFilter: ['src', 'srcset', 'poster', 'data-src'],
+      childList: true
     });
   }
 
-  // Wheel interception
+  // Wheel event interception
   function onWheel(e) {
     if (!config.enabled) return;
 
@@ -365,7 +440,7 @@
 
       const currentTransform = targetMedia.style.transform || '';
       let baseTransform = '';
-      if (currentTransform && !currentTransform.includes('translate(')) {
+      if (!supportsIndependentTransforms && currentTransform) {
         baseTransform = currentTransform;
       }
 
@@ -395,7 +470,7 @@
       while (p && p !== document.body && p !== document.documentElement) {
         const pStyle = window.getComputedStyle(p);
         if (pStyle.overflow === 'hidden' || pStyle.overflowX === 'hidden' || pStyle.overflowY === 'hidden') {
-          activeState.overflowParents.push(p);
+          activeState.overflowParents.push({ el: p, prevOverflow: p.style.overflow });
           p.style.overflow = 'visible';
         }
         p = p.parentElement;
@@ -437,6 +512,11 @@
   function onPointerDown(e) {
     if (!activeElement || !activeState || activeState.scale <= 1.0) return;
     if (e.button !== 0 && e.button !== 1) return;
+
+    // Allow user to click video controls (play/pause, volume, timeline) without dragging
+    if (isControlElement(e.target)) {
+      return;
+    }
 
     if (isEventOnActiveMedia(e)) {
       isDragging = true;
@@ -523,6 +603,7 @@
 
   function onDoubleClick(e) {
     if (!activeElement || !activeState || activeState.scale <= 1.0) return;
+    if (isControlElement(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     resetZoom(activeElement);
@@ -537,7 +618,7 @@
       return;
     }
 
-    const navKeys = ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'PageDown', 'PageUp', 'Home', 'End', ' '];
+    const navKeys = ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'PageDown', 'PageUp', 'Home', 'End'];
     if (navKeys.includes(e.key)) {
       resetZoom(activeElement);
     }
