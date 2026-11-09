@@ -74,8 +74,8 @@
   }
 
   function isModifierPressed(e) {
-    if (config.modifierKey === 'ctrl') return e.ctrlKey || e.metaKey; // Ctrl на Windows/Linux, або Cmd (⌘) / Ctrl на Mac
-    if (config.modifierKey === 'alt') return e.altKey; // Alt / Option (⌥) на Mac
+    if (config.modifierKey === 'ctrl') return e.ctrlKey || e.metaKey;
+    if (config.modifierKey === 'alt') return e.altKey;
     if (config.modifierKey === 'shift') return e.shiftKey;
     if (config.modifierKey === 'cmd') return e.metaKey;
     return e.ctrlKey || e.metaKey;
@@ -130,7 +130,6 @@
   }
 
   function findLargestMedia(container = document) {
-    // Check videos first in container
     const videos = container.querySelectorAll('video');
     for (const v of videos) {
       if (isVisible(v)) return v;
@@ -172,22 +171,31 @@
     if (!activeElement || !document.contains(activeElement)) return false;
     const path = e.composedPath ? e.composedPath() : [];
     if (path.includes(activeElement)) return true;
-    return isCursorNearElement(activeElement, e.clientX, e.clientY, 50);
+
+    // Check if event target is inside player container of activeElement (e.g. YouTube #movie_player)
+    for (const el of path) {
+      if (!el || !(el instanceof Element)) continue;
+      if (
+        el.contains(activeElement) &&
+        (el.id === 'movie_player' || el.classList.contains('html5-video-player') || el.classList.contains('video-container'))
+      ) {
+        return true;
+      }
+    }
+
+    return isCursorNearElement(activeElement, e.clientX, e.clientY, 80);
   }
 
-  // Only genuine interactive control buttons or scrubber tracks are treated as controls
+  // Only real interactive controls (buttons, volume, progress bar) should prevent dragging
   function isControlElement(target) {
     if (!target || !(target instanceof Element)) return false;
     const tag = (target.tagName || '').toLowerCase();
     if (tag === 'button' || tag === 'input' || tag === 'select' || tag === 'a') return true;
-    if (target.getAttribute && target.getAttribute('role') === 'button') return true;
 
-    // Tight check for actual button or slider element, NOT broad parent containers
-    const btn = target.closest('button, [role="button"], input[type="range"]');
-    if (btn) return true;
-
-    const scrubber = target.closest('[class*="scrub"], [class*="progress-bar"], [class*="seek-bar"], [class*="volume-slider"]');
-    if (scrubber) return true;
+    // Bottom controls bar (YouTube .ytp-chrome-bottom, player controls)
+    if (target.closest('.ytp-chrome-bottom, .ytp-chrome-top, .vjs-control-bar, [class*="control-bar"], [class*="progress-bar"], [class*="timeline"]')) {
+      return true;
+    }
 
     return false;
   }
@@ -225,7 +233,7 @@
       }
     }
 
-    // Check if any element under cursor contains a <video> (e.g. video player overlay)
+    // Check if any element under cursor contains a <video> (e.g. YouTube video player overlay)
     for (const el of elements) {
       if (el === document.body || el === document.documentElement) continue;
       const vid = el.querySelector('video');
@@ -334,7 +342,9 @@
       mediaObserver = null;
     }
 
+    document.documentElement.classList.remove('mza-dragging-active');
     target.classList.remove('mza-zoomed', 'mza-dragging');
+
     if (activeState && activeState.originalStyles) {
       const orig = activeState.originalStyles;
       target.style.scale = orig.scale || '';
@@ -354,10 +364,14 @@
       target.style.pointerEvents = '';
     }
 
-    // Restore overflow on parents
+    // Restore overflow on parents using setProperty / removeProperty with priority
     if (activeState && activeState.overflowParents) {
       for (const item of activeState.overflowParents) {
-        item.el.style.overflow = item.prevOverflow;
+        if (item.prevOverflow) {
+          item.el.style.setProperty('overflow', item.prevOverflow, item.prevPriority || '');
+        } else {
+          item.el.style.removeProperty('overflow');
+        }
       }
     }
 
@@ -372,15 +386,15 @@
 
   function applyTransform(el, scale, panX, panY) {
     if (supportsIndependentTransforms) {
-      el.style.scale = `${scale.toFixed(3)}`;
-      el.style.translate = `${panX.toFixed(2)}px ${panY.toFixed(2)}px`;
+      el.style.setProperty('scale', `${scale.toFixed(3)}`, 'important');
+      el.style.setProperty('translate', `${panX.toFixed(2)}px ${panY.toFixed(2)}px`, 'important');
     } else {
       const base = activeState && activeState.baseTransform ? `${activeState.baseTransform} ` : '';
-      el.style.transform = `${base}translate(${panX.toFixed(2)}px, ${panY.toFixed(2)}px) scale(${scale.toFixed(3)})`;
+      el.style.setProperty('transform', `${base}translate(${panX.toFixed(2)}px, ${panY.toFixed(2)}px) scale(${scale.toFixed(3)})`, 'important');
     }
   }
 
-  // Observe media src changes to reset zoom when changing slides
+  // Observe media src changes to reset zoom when changing slides/videos
   function observeMediaChanges(el) {
     if (mediaObserver) {
       mediaObserver.disconnect();
@@ -427,10 +441,8 @@
         e.stopImmediatePropagation();
 
         if (e.shiftKey) {
-          // Horizontal pan with Shift
           activeState.panX -= (e.deltaY || e.deltaX) * config.wheelPanSpeed;
         } else {
-          // Vertical pan to move focus higher / lower
           activeState.panY -= e.deltaY * config.wheelPanSpeed;
           if (e.deltaX) {
             activeState.panX -= e.deltaX * config.wheelPanSpeed;
@@ -440,10 +452,10 @@
         applyTransform(activeElement, activeState.scale, activeState.panX, activeState.panY);
         return;
       }
-      return; // If not zoomed in, let normal wheel scroll/flip slides as usual
+      return;
     }
 
-    // SCENARIO 2: MODIFIER (Ctrl) + WHEEL: ZOOM IN / OUT
+    // SCENARIO 2: MODIFIER (Ctrl/Cmd) + WHEEL: ZOOM IN / OUT
     const targetMedia = findTargetMedia(e);
     if (!targetMedia) return;
 
@@ -486,13 +498,19 @@
       targetMedia.style.zIndex = '2147483646';
       targetMedia.classList.add('mza-zoomed');
 
-      // Lift overflow:hidden on parents
+      // Lift overflow:hidden on parents with !important to defeat YouTube/player styles
       let p = targetMedia.parentElement;
       while (p && p !== document.body && p !== document.documentElement) {
         const pStyle = window.getComputedStyle(p);
         if (pStyle.overflow === 'hidden' || pStyle.overflowX === 'hidden' || pStyle.overflowY === 'hidden') {
-          activeState.overflowParents.push({ el: p, prevOverflow: p.style.overflow });
-          p.style.overflow = 'visible';
+          activeState.overflowParents.push({
+            el: p,
+            prevOverflow: p.style.overflow,
+            prevPriority: p.style.getPropertyPriority('overflow')
+          });
+          p.style.setProperty('overflow', 'visible', 'important');
+          p.style.setProperty('overflow-x', 'visible', 'important');
+          p.style.setProperty('overflow-y', 'visible', 'important');
         }
         p = p.parentElement;
       }
@@ -534,7 +552,7 @@
     if (!activeElement || !activeState || activeState.scale <= 1.0) return;
     if (e.button !== 0 && e.button !== 1) return;
 
-    // Allow user to click real video controls (play/pause, volume, timeline scrubber) without dragging
+    // Allow user to click real video controls without dragging
     if (isControlElement(e.target)) {
       return;
     }
@@ -548,6 +566,7 @@
       startPanY = activeState.panY;
 
       activeElement.classList.add('mza-dragging');
+      document.documentElement.classList.add('mza-dragging-active');
 
       e.preventDefault();
       e.stopPropagation();
@@ -581,6 +600,7 @@
     if (!isDragging) return;
     isDragging = false;
 
+    document.documentElement.classList.remove('mza-dragging-active');
     if (activeElement) {
       activeElement.classList.remove('mza-dragging');
     }
@@ -602,18 +622,15 @@
       return;
     }
 
-    // If user clicked any navigation button or outside controls, reset zoom
+    // Only reset if clicked an explicit next/prev slide or close button, NOT the video player
     if (activeElement && activeState && activeState.scale > 1.0) {
       const clickedEl = e.target;
       if (clickedEl !== activeElement && !activeElement.contains(clickedEl)) {
-        const tag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : '';
-        const role = clickedEl.getAttribute ? clickedEl.getAttribute('role') : '';
         const cls = String(clickedEl.className || '').toLowerCase();
         if (
-          tag === 'button' || tag === 'a' || tag === 'svg' || tag === 'path' ||
-          role === 'button' || cls.includes('arrow') || cls.includes('next') ||
-          cls.includes('prev') || cls.includes('nav') || cls.includes('dot') ||
-          cls.includes('thumb') || cls.includes('close')
+          cls.includes('swiper-button') || cls.includes('slick-arrow') ||
+          cls.includes('pswp__button--arrow') || cls.includes('gallery-next') ||
+          cls.includes('gallery-prev')
         ) {
           resetZoom(activeElement);
         }
@@ -638,7 +655,12 @@
       return;
     }
 
-    const navKeys = ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'PageDown', 'PageUp', 'Home', 'End'];
+    // Only reset on gallery navigation keys if not in a video player (to avoid breaking YouTube arrow seeking)
+    if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'video') {
+      return;
+    }
+
+    const navKeys = ['PageDown', 'PageUp', 'Home', 'End'];
     if (navKeys.includes(e.key)) {
       resetZoom(activeElement);
     }

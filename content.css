@@ -13,6 +13,13 @@
   user-select: none !important;
 }
 
+/* Ensure grabbing cursor on all player overlays while dragging */
+.mza-dragging-active,
+.mza-dragging-active * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
 /* Subtle zoom level badge */
 .mza-zoom-badge {
   position: fixed;
