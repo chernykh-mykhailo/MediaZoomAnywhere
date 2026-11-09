@@ -843,6 +843,23 @@
     return false;
   }
 
+  const blockedKeyCodes = new Set();
+
+  function blockKeyEvent(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }
+
+  function onKeyUpOrPress(e) {
+    if (blockedKeyCodes.has(e.code)) {
+      blockKeyEvent(e);
+      if (e.type === 'keyup') {
+        blockedKeyCodes.delete(e.code);
+      }
+    }
+  }
+
   // Keyboard zoom + navigation resets
   function onKeyDown(e) {
     if (config.enabled && config.keyboardZoomEnabled && !isTypingTarget(e.target)) {
@@ -859,9 +876,8 @@
         }
 
         if (target) {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
+          blockKeyEvent(e);
+          if (e.code) blockedKeyCodes.add(e.code);
           const factor = isZoomIn ? config.zoomSpeed : (1 / config.zoomSpeed);
           applyZoomStep(target, factor, null, null);
           return;
@@ -891,6 +907,7 @@
   function onWindowBlur() {
     isDragging = false;
     hasDragged = false;
+    blockedKeyCodes.clear();
     document.documentElement.classList.remove('mza-dragging-active');
     if (activeElement) {
       activeElement.classList.remove('mza-dragging');
@@ -915,6 +932,11 @@
   window.addEventListener('click', onClick, { capture: true });
   window.addEventListener('dblclick', onDoubleClick, { capture: true });
   window.addEventListener('keydown', onKeyDown, { capture: true });
+  window.addEventListener('keypress', onKeyUpOrPress, { capture: true });
+  window.addEventListener('keyup', onKeyUpOrPress, { capture: true });
+  document.addEventListener('keydown', onKeyDown, { capture: true });
+  document.addEventListener('keypress', onKeyUpOrPress, { capture: true });
+  document.addEventListener('keyup', onKeyUpOrPress, { capture: true });
   window.addEventListener('blur', onWindowBlur);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) onWindowBlur();
