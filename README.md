@@ -1,12 +1,16 @@
 # 🔍 Media Zoom Anywhere
 
 <p align="center">
+  <b>🇬🇧 English</b> | <a href="README.uk.md">🇺🇦 Українська</a>
+</p>
+
+<p align="center">
   <img src="icons/icon128.png" width="96" height="96" alt="Media Zoom Anywhere Logo" />
 </p>
 
 <p align="center">
-  <b>Браузерне розширення для легкого наближення, скролу та переміщення фото й відео на будь-яких сайтах.</b><br>
-  <i>Без ламання верстки сторінки та без випадкового гортання слайдів каруселі.</i>
+  <b>A lightweight browser extension to zoom, scroll, and pan photos and videos on any website.</b><br>
+  <i>Without zooming the entire webpage or accidentally flipping carousel slides.</i>
 </p>
 
 <p align="center">
@@ -18,84 +22,84 @@
 
 ---
 
-## 🎯 Проблема, яку вирішує розширення
+## 🎯 The Problem It Solves
 
-На багатьох сучасних веб-сайтах (YouTube, Instagram, Twitter/X, Reddit, каруселі інтернет-магазинів, галереї портфоліо):
-1. **Звичайне `Ctrl + Колесико`** збільшує **всю сторінку сайту цілком** (разом із шрифтами, панелями та шапкою), спотворюючи інтерфейс.
-2. Сайти часто вішають обробники `wheel` на слайдери: спроба прокрутити колесико над фото чи відео **перемикає на наступний слайд** замість наближення.
-3. Відеоплеєри мають приховані шари оверлеїв, кнопок та субтитрів, через які стандартні інструменти зуму не бачать саме відео або зміщують його від центру.
+On many modern websites (YouTube, Instagram, Twitter/X, Reddit, e-commerce carousels, portfolio galleries):
+1. **Default `Ctrl + Mouse Wheel`** zooms the **entire webpage** (text, sidebars, headers), breaking layout ergonomics.
+2. Carousels and image lightboxes hijack `wheel` events: scrolling over a photo or video **flips to the next slide** instead of zooming in.
+3. Video players place transparent click-catchers, captions, and control overlays on top of `<video>`, causing generic zoom tools to miss the video or break its centered alignment.
 
-**Media Zoom Anywhere** ізолює подію прокрутки у фазі capture, блокує поведінку сайту та браузера і плавно масштабує **суто саме медіа** під вашим курсором.
+**Media Zoom Anywhere** intercepts wheel and pointer events in the capture phase, isolates them from site scripts and browser page zoom, and smoothly scales **only the target media** directly beneath your cursor.
 
 ---
 
-## 🍏 Повна підтримка macOS та Apple Trackpad
+## 🍏 Full macOS & Apple Trackpad Support
 
-Розширення спочатку розроблялося з повноцінною кросплатформною підтримкою:
-- **Клавіша ⌘ Command:** на Mac замість Ctrl можна використовувати природну комбінацію **`⌘ Cmd + Колесико миші`** (або стандартний `Ctrl`).
+Built from the ground up for cross-platform workflows:
+- **⌘ Command Key:** Use **`⌘ Cmd + Mouse Wheel`** (or `Ctrl`) on macOS.
 - **Apple Magic Trackpad / MacBook Trackpad:**
-  - **Pinch-to-zoom (зведення/розведення двох пальців):** наближає та віддаляє конкретне фото або відео під курсором без зміни масштабу всієї вкладки.
-  - **Свайп двома пальцями:** коли медіа збільшено, свайп двома пальцями вгору/вниз плавно переміщує фокус по ньому.
-- **Клавіша ⌥ Option:** доступна як альтернативний модифікатор у меню налаштувань.
+  - **2-finger Pinch-to-Zoom:** Zooms into the specific photo or video under your cursor without scaling the browser tab.
+  - **2-finger Scroll:** When zoomed in, two-finger vertical/horizontal scrolling smoothly pans across the zoomed media.
+- **⌥ Option Key:** Available as an alternative activation key in the popup settings.
 
 ---
 
-## ✨ Основні можливості
+## ✨ Key Features
 
-- 🎯 **Зум точно в точку курсора:** наближення фокусується саме на тій деталі зображення чи кадру відео, на яку вказує стрілка миші.
-- ↕️ **Wheel Pan (скрол фокусу коліщатком):** коли фото або відео збільшено (> 100%), звичайне обертання коліщатка без додаткових клавіш плавно рухає медіа **вище / нижче**. Із затиснутим **Shift** — **вліво / вправо**.
-- 🖐️ **Вільне перетягування (Drag & Pan):** затисніть ліву кнопку миші (або трекпад) у будь-якій точці збільшеного медіа, щоб перемістити його.
-- 🎬 **Повна підтримка складних відеоплеєрів:**
-  - Працює на **YouTube**, HTML5-плеєрах, Instagram Reels, TikTok, Twitter відео тощо.
-  - Зберігає центрування відео (`translate(-50%, -50%)`), обходить обмеження `overflow: hidden` та захисні прозорі оверлеї плеєрів.
-  - Не заважає клікати по кнопках Play/Pause, смузі перемотки (таймлайну) чи повзунку звуку.
-- 🔄 **Розумне скидання зуму:**
-  - Зменшення масштабу коліщатком назад до 100%;
-  - Швидкий подвійний клік на медіа;
-  - Натискання клавіші `Esc`;
-  - Перехід до наступного медіа у слайдері чи зміна джерела відео.
-- ⚙️ **Зручний Popup:** швидке вмикання/вимикання, зміна чутливості та обмеження максимального зуму (до 25x).
+- 🎯 **Cursor-Anchored Zoom:** Scaling keeps the exact pixel under your mouse pointer locked in place.
+- ↕️ **Wheel Pan:** When media is zoomed (> 100%), scrolling the normal mouse wheel pans **up/down** smoothly. Hold **Shift + Wheel** to pan **left/right**. (Scrolling outside the media continues to scroll the webpage normally.)
+- 🖐️ **Freeform Drag & Pan:** Hold left-click anywhere on the zoomed photo or video to drag it freely.
+- 🎬 **Smart Video Player Support:**
+  - Works seamlessly on **YouTube**, HTML5 players, Reels, TikTok, Twitter/X videos, and more.
+  - Preserves existing centering (`translate(-50%, -50%)`), bypasses `overflow: hidden`, and pierces subtitle/overlay layers.
+  - Leaves playback controls (Play/Pause, timeline scrubber, volume slider) fully clickable.
+- 🔄 **Smart Auto-Reset:**
+  - Zooming back out to 100%;
+  - Double-clicking the media;
+  - Pressing `Esc`;
+  - Navigating to the next slide or closing a modal/lightbox.
+- ⚙️ **Bilingual Popup UI (EN / UK):** Quick enable/disable toggle, language switcher, modifier key selection, zoom speed, and max zoom limit (up to 25x).
 
 ---
 
-## ⌨️ Керування та гарячі клавіші
+## ⌨️ Controls & Shortcuts
 
-| Дія | Windows / Linux | macOS (Mac) |
+| Action | Windows / Linux | macOS (Mac) |
 |---|---|---|
-| **Наблизити / Віддалити** | `Ctrl` + Колесико миші | `⌘ Cmd` + Колесико <br> *(або жест Pinch 2 пальцями на трекпаді)* |
-| **Перемістити фокус вище / нижче** | Звичайне колесико миші *(коли збільшено)* | Скрол 2 пальцями вгору/вниз *(коли збільшено)* |
-| **Перемістити фокус вліво / вправо** | `Shift` + Колесико миші | `Shift` + Колесико / скрол 2 пальцями вбік |
-| **Вільне перетягування** | Затиснути ліву кнопку миші | Затиснути трекпад або ліву кнопку миші |
-| **Миттєве скидання зуму (100%)** | Подвійний клік / `Esc` | Подвійний клік / `Esc` |
+| **Zoom In / Out** | `Ctrl` + Mouse Wheel | `⌘ Cmd` + Mouse Wheel <br> *(or 2-finger Pinch on Trackpad)* |
+| **Pan Vertically (Up / Down)** | Normal Mouse Wheel *(while zoomed)* | 2-finger Scroll Up/Down *(while zoomed)* |
+| **Pan Horizontally (Left / Right)** | `Shift` + Mouse Wheel | `Shift` + Wheel / 2-finger Side Scroll |
+| **Freeform Drag** | Left-click & Drag | Trackpad / Left-click & Drag |
+| **Instant Reset (100%)** | Double-click / `Esc` | Double-click / `Esc` |
 
 ---
 
-## 📥 Встановлення (Chrome, Brave, Edge, Arc, Opera)
+## 📥 Installation (Chrome, Brave, Edge, Arc, Opera)
 
-Оскільки розширення створене за сучасним стандартом **Manifest V3**, воно працює в будь-якому браузері на базі Chromium на **Windows, macOS та Linux**:
+Built on **Manifest V3**, compatible with all Chromium-based browsers on **Windows, macOS, and Linux**:
 
-1. Завантажте цей репозиторій (натисніть **Code -> Download ZIP** на GitHub та розпакуйте його).
-2. Відкрийте браузер і перейдіть у менеджер розширень:
+1. Download this repository (click **Code -> Download ZIP** on GitHub or grab the archive from **Releases** and extract it).
+2. Open your browser's Extensions page:
    - **Chrome:** `chrome://extensions/`
    - **Brave:** `brave://extensions/`
    - **Edge:** `edge://extensions/`
    - **Arc:** `arc://extensions/`
-3. Увімкніть перемикач **«Режим розробника» (Developer mode)** у правому верхньому кутку.
-4. Натисніть кнопку **«Завантажити розпаковане» (Load unpacked)**.
-5. Оберіть папку розширення (де знаходиться файл `manifest.json`).
-6. Готово! Тепер розширення активно на всіх відкритих та нових сторінках.
+3. Enable **Developer mode** in the top-right corner.
+4. Click **Load unpacked**.
+5. Select the extracted folder containing `manifest.json`.
+6. Done! Reload open tabs (`F5`) and start zooming.
 
 ---
 
-## 🛠️ Архітектура та технічні особливості
+## 🛠️ Technical Highlights
 
-- **Capture Phase Interception:** слухачі подій `wheel`, `pointerdown`, `pointermove` реєструються на рівні `window` у фазі capture із викликом `stopImmediatePropagation()`, що унеможливлює перехоплення події скриптами веб-сторінки.
-- **CSS Independent Transform Properties:** для збереження верстки сайтів масштабування реалізовано через незалежні CSS-властивості `scale` та `translate` (з підтримкою `!important`), що запобігає конфліктам із класичними стилями центрування елементів (`transform: translate(-50%, -50%)`).
-- **Overlay Piercing:** автоматичне виявлення активного медіа під курсором навіть крізь прозорі клік-шари, вікна субтитрів та Shadow DOM веб-компонентів.
-- **Minimal Permissions:** розширення використовує лише дозвіл `storage` для збереження локальних налаштувань користувача. Жодної аналітики, зовнішніх запитів чи збору персональних даних.
+- **Capture-Phase Isolation:** Event listeners for `wheel`, `pointerdown`, and `pointermove` are bound on `window` in the capture phase using `stopImmediatePropagation()`, preventing page swipers and carousels from hijacking gestures.
+- **Independent CSS Transform Properties:** Uses modern CSS `scale` and `translate` properties (with `!important`) so site-native `transform` centering rules (`translate(-50%, -50%)`) remain intact.
+- **Overlay Piercing:** Uses `document.elementsFromPoint()` and `composedPath()` to accurately target underlying `<img>`, `<video>`, and `<canvas>` elements across Shadow DOM and player overlays.
+- **Zero Tracking & Minimal Permissions:** Only requests `storage` permission to save your local preferences. No analytics, external requests, or data collection.
 
 ---
 
-## 📄 Ліцензія
+## 📄 License
 
-Проєкт поширюється під ліцензією [MIT](LICENSE). Відкритий для використання, модифікації та покращення.
+Distributed under the [MIT](LICENSE) License. Contributions, issues, and feature requests are welcome!

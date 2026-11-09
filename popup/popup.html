@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Media Zoom Settings</title>
@@ -8,7 +8,7 @@
 <body>
   <div class="header">
     <div class="logo">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="11" cy="11" r="8"></circle>
         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         <line x1="11" y1="8" x2="11" y2="14"></line>
@@ -16,25 +16,28 @@
       </svg>
       <span>Media Zoom</span>
     </div>
-    <label class="switch">
-      <input type="checkbox" id="toggleEnabled" checked>
-      <span class="slider"></span>
-    </label>
+    <div class="header-actions">
+      <button id="langToggle" class="lang-btn" title="Switch language">EN</button>
+      <label class="switch">
+        <input type="checkbox" id="toggleEnabled" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
   </div>
 
   <div class="content">
     <div class="setting-row">
-      <label for="modifierKey">Клавіша активації:</label>
+      <label for="modifierKey" data-i18n="modifierLabel">Activation key:</label>
       <select id="modifierKey">
-        <option value="ctrl">Ctrl / Cmd ⌘ (за замовчуванням)</option>
-        <option value="alt">Alt / Option ⌥</option>
-        <option value="shift">Shift</option>
+        <option value="ctrl" data-i18n="optCtrl">Ctrl / Cmd ⌘ (default)</option>
+        <option value="alt" data-i18n="optAlt">Alt / Option ⌥</option>
+        <option value="shift" data-i18n="optShift">Shift</option>
       </select>
     </div>
 
     <div class="setting-row">
       <div class="label-with-value">
-        <label for="zoomSpeed">Швидкість зуму:</label>
+        <label for="zoomSpeed" data-i18n="zoomSpeedLabel">Zoom speed:</label>
         <span id="zoomSpeedVal">15%</span>
       </div>
       <input type="range" id="zoomSpeed" min="1.05" max="1.35" step="0.01" value="1.15">
@@ -42,20 +45,20 @@
 
     <div class="setting-row">
       <div class="label-with-value">
-        <label for="maxZoom">Максимальний зум:</label>
+        <label for="maxZoom" data-i18n="maxZoomLabel">Max zoom:</label>
         <span id="maxZoomVal">15x</span>
       </div>
       <input type="range" id="maxZoom" min="2" max="25" step="1" value="15">
     </div>
 
     <div class="tips">
-      <div class="tip-title">Керування (Windows / Mac):</div>
+      <div class="tip-title" data-i18n="controlsTitle">Controls (Windows / Mac):</div>
       <ul>
-        <li><strong>Ctrl (або Cmd ⌘) + Колесико</strong> — наближення та віддалення (на Mac також жест двома пальцями Pinch-to-zoom).</li>
-        <li><strong>Звичайне колесико</strong> (коли збільшено) — плавно переміщує фокус вище / нижче.</li>
-        <li><strong>Shift + Колесико</strong> — переміщення вліво / вправо.</li>
-        <li><strong>Затиснути ліву кнопку</strong> — вільне перетягування.</li>
-        <li><strong>Подвійний клік / Esc</strong> — миттєве скидання зуму.</li>
+        <li data-i18n-html="tipZoom"><strong>Ctrl (or Cmd ⌘) + Wheel</strong> — zoom in/out (or 2-finger Pinch on Mac trackpad).</li>
+        <li data-i18n-html="tipWheelPan"><strong>Normal Wheel</strong> (when zoomed) — smoothly pan up/down.</li>
+        <li data-i18n-html="tipShiftPan"><strong>Shift + Wheel</strong> — pan left/right.</li>
+        <li data-i18n-html="tipDrag"><strong>Left-click Drag</strong> — free pan anywhere.</li>
+        <li data-i18n-html="tipReset"><strong>Double-click / Esc</strong> — reset zoom to 100%.</li>
       </ul>
     </div>
   </div>
@@ -63,4 +66,3 @@
   <script src="popup.js"></script>
 </body>
 </html>
-

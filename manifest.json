@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Media Zoom Anywhere",
-  "version": "1.0.0",
-  "description": "Zoom photos and videos with Ctrl/Cmd + Mouse Wheel without triggering page or slider scrolling.",
+  "name": "__MSG_extName__",
+  "version": "1.0.1",
+  "default_locale": "en",
+  "description": "__MSG_extDesc__",
   "permissions": [
     "storage"
   ],

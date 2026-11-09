@@ -17,6 +17,7 @@ Copy-Item (Join-Path $rootDir "content.js") $tempDir
 Copy-Item (Join-Path $rootDir "content.css") $tempDir
 Copy-Item (Join-Path $rootDir "icons") $tempDir -Recurse
 Copy-Item (Join-Path $rootDir "popup") $tempDir -Recurse
+Copy-Item (Join-Path $rootDir "_locales") $tempDir -Recurse
 
 # Compress to ZIP
 Compress-Archive -Path "$tempDir\*" -DestinationPath $zipPath -Force
