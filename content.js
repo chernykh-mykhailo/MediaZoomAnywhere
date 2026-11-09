@@ -619,18 +619,19 @@
       };
 
       const isVideo = targetMedia.tagName && targetMedia.tagName.toLowerCase() === 'video';
+      const inModal = Boolean(targetMedia.closest('[role="dialog"], [aria-modal="true"], .modal, .lightbox, .pswp, .viewer, [class*="viewer"], [class*="lightbox"], [class*="modal"]'));
       const computed = window.getComputedStyle(targetMedia);
       if (computed.position === 'static') {
         targetMedia.style.position = 'relative';
       }
-      // Keep <video> below its player control bars so controls remain visible and clickable!
-      if (!isVideo) {
+      // Keep <video> and modal/lightbox media below player/lightbox UI toolbars and close buttons!
+      if (!isVideo && !inModal) {
         targetMedia.style.zIndex = '2147483646';
       }
       targetMedia.classList.add('mza-zoomed');
 
-      // Lift overflow:hidden on direct container parents for photos
-      if (!isVideo) {
+      // Lift overflow:hidden on direct container parents only for inline thumbnails (not videos or modal viewers, so controls/close buttons stay unobstructed)
+      if (!isVideo && !inModal) {
         let p = targetMedia.parentElement;
         let depth = 0;
         while (p && p !== document.body && p !== document.documentElement && depth < 5) {
@@ -696,16 +697,9 @@
   // Pointer & Mouse Down handling
   function onPointerDown(e) {
     if (!activeElement || !activeState || activeState.scale <= 1.0) return;
-
-    // Clicking anywhere outside the zoomed media/player unfocuses and resets zoom immediately
-    if (!isEventOnActiveMedia(e)) {
-      resetZoom(activeElement);
-      return;
-    }
-
     if (e.button !== 0 && e.button !== 1) return;
 
-    // Allow user to click real video controls (or native HTML5 video controls bar at bottom) without dragging
+    // Allow user to click real controls (close button, arrows, player bars) without dragging or shifting layout before click completes
     if (isControlElement(e.target)) {
       return;
     }
@@ -716,6 +710,11 @@
       activeState.origRect &&
       e.clientY >= activeState.origRect.bottom - 55
     ) {
+      return;
+    }
+
+    // Only capture drag if clicking inside active media area; outside clicks pass cleanly to onClick
+    if (!isEventOnActiveMedia(e)) {
       return;
     }
 
@@ -744,7 +743,7 @@
     const dx = e.clientX - dragStartX;
     const dy = e.clientY - dragStartY;
 
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
       hasDragged = true;
     }
 
@@ -775,7 +774,7 @@
     }
   }
 
-  // Prevent accidental clicks after drag
+  // Prevent accidental clicks after drag, and reset zoom on outside clicks or modal close
   function onClick(e) {
     if (hasDragged) {
       hasDragged = false;
@@ -785,8 +784,13 @@
       return;
     }
 
-    // Reset if clicked explicit next/prev slide, OR if media was hidden/closed by the click
     if (activeElement && activeState && activeState.scale > 1.0) {
+      // If user clicked outside the zoomed media/player, reset zoom cleanly AFTER the click fires on the target!
+      if (!isEventOnActiveMedia(e)) {
+        resetZoom(activeElement);
+        return;
+      }
+
       const clickedEl = e.target;
       if (clickedEl !== activeElement && !activeElement.contains(clickedEl)) {
         const cls = String(clickedEl.className || '').toLowerCase();
@@ -800,13 +804,15 @@
         }
       }
 
-      // Check shortly after click in case the click closed a lightbox/modal
+      // Check after click in case the click closed a lightbox/modal (including animated fade-outs)
       const prevEl = activeElement;
-      setTimeout(() => {
-        if (activeElement === prevEl && (!document.contains(prevEl) || !isVisible(prevEl))) {
-          resetZoom(prevEl);
-        }
-      }, 60);
+      [60, 250, 450].forEach((delay) => {
+        setTimeout(() => {
+          if (activeElement === prevEl && (!document.contains(prevEl) || !isVisible(prevEl))) {
+            resetZoom(prevEl);
+          }
+        }, delay);
+      });
     }
   }
 
