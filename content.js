@@ -16,7 +16,8 @@
     kbdPanDown: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowRight', key: 'ArrowRight' },
     keyboardPanEnabled: true,
     keyboardPanModifier: 'shift',
-    keyboardPanStep: 200
+    keyboardPanStep: 200,
+    resetOnMediaChange: true
   };
 
   // Check support for individual transform properties (Chrome 104+)
@@ -35,7 +36,8 @@
     chrome.storage.sync.get([
       'enabled', 'modifierKey', 'zoomSpeed', 'maxZoom',
       'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut',
-      'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier', 'keyboardPanStep'
+      'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier', 'keyboardPanStep',
+      'resetOnMediaChange'
     ], (items) => {
       if (items.enabled !== undefined) config.enabled = items.enabled;
       if (items.modifierKey) config.modifierKey = items.modifierKey;
@@ -50,6 +52,7 @@
       if (items.keyboardPanEnabled !== undefined) config.keyboardPanEnabled = items.keyboardPanEnabled;
       if (items.keyboardPanModifier) config.keyboardPanModifier = items.keyboardPanModifier;
       if (items.keyboardPanStep !== undefined) config.keyboardPanStep = Number(items.keyboardPanStep);
+      if (items.resetOnMediaChange !== undefined) config.resetOnMediaChange = items.resetOnMediaChange;
     });
 
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -70,6 +73,7 @@
         if (changes.keyboardPanEnabled) config.keyboardPanEnabled = changes.keyboardPanEnabled.newValue;
         if (changes.keyboardPanModifier) config.keyboardPanModifier = changes.keyboardPanModifier.newValue;
         if (changes.keyboardPanStep) config.keyboardPanStep = Number(changes.keyboardPanStep.newValue);
+        if (changes.resetOnMediaChange) config.resetOnMediaChange = changes.resetOnMediaChange.newValue;
       }
     });
   }
@@ -1067,7 +1071,30 @@
     }
   }
 
-  // Observe media src changes to reset zoom when changing slides/videos
+  function hasMediaSwitchedAway(el) {
+    if (!el || !el.isConnected || !isVisible(el)) return true;
+    if (el.closest && el.closest('[aria-hidden="true"], [inert]')) return true;
+
+    const clipped = getVisibleClippedRect(el);
+    if (!clipped) return true;
+
+    // When overflow:hidden was temporarily lifted on carousel/gallery containers, check if the slide wrapper moved outside
+    if (activeState && activeState.overflowParents && activeState.overflowParents.length > 0) {
+      const container = activeState.overflowParents[activeState.overflowParents.length - 1].el;
+      const trackParent = el.parentElement;
+      if (container && container.isConnected && trackParent && trackParent.isConnected && trackParent !== container) {
+        const cRect = container.getBoundingClientRect();
+        const tRect = trackParent.getBoundingClientRect();
+        const horizOverlap = Math.min(cRect.right, tRect.right) - Math.max(cRect.left, tRect.left);
+        const vertOverlap = Math.min(cRect.bottom, tRect.bottom) - Math.max(cRect.top, tRect.top);
+        if (horizOverlap < 10 || vertOverlap < 10) return true;
+      }
+    }
+
+    return false;
+  }
+
+  // Observe media src and container slide changes to reset zoom when switching slides/videos
   function observeMediaChanges(el) {
     if (mediaObserver) {
       mediaObserver.disconnect();
@@ -1075,20 +1102,26 @@
     }
 
     mediaObserver = new MutationObserver((mutations) => {
+      if (!config.resetOnMediaChange) return;
       for (const m of mutations) {
-        if (m.type === 'attributes') {
-          const attr = m.attributeName;
-          if (attr === 'src' || attr === 'srcset' || attr === 'poster' || attr === 'data-src') {
-            resetZoom(el);
-            return;
-          }
-        } else if (m.type === 'childList') {
-          for (const node of m.addedNodes) {
-            if (node.tagName && node.tagName.toLowerCase() === 'source') {
+        if (m.target === el) {
+          if (m.type === 'attributes') {
+            const attr = m.attributeName;
+            if (attr === 'src' || attr === 'srcset' || attr === 'poster' || attr === 'data-src') {
               resetZoom(el);
               return;
             }
+          } else if (m.type === 'childList') {
+            for (const node of m.addedNodes) {
+              if (node.tagName && node.tagName.toLowerCase() === 'source') {
+                resetZoom(el);
+                return;
+              }
+            }
           }
+        } else if (hasMediaSwitchedAway(el)) {
+          resetZoom(el);
+          return;
         }
       }
     });
@@ -1098,6 +1131,17 @@
       attributeFilter: ['src', 'srcset', 'poster', 'data-src'],
       childList: true
     });
+
+    let ancestor = el.parentElement;
+    let depth = 0;
+    while (ancestor && ancestor !== document.body && ancestor !== document.documentElement && depth < 4) {
+      mediaObserver.observe(ancestor, {
+        attributes: true,
+        attributeFilter: ['style', 'class', 'hidden', 'aria-hidden', 'inert']
+      });
+      ancestor = ancestor.parentElement;
+      depth++;
+    }
   }
 
   // Wheel event interception
@@ -1264,11 +1308,33 @@
     if (!el || !(el instanceof Element)) return false;
     const btn = el.closest ? (el.closest('button, a, [role="button"]') || el) : el;
     const cls = getElementClassString(btn).toLowerCase();
+    const aria = (btn.getAttribute ? (btn.getAttribute('aria-label') || '') : '').toLowerCase();
+    const title = (btn.getAttribute ? (btn.getAttribute('title') || '') : '').toLowerCase();
+    const testId = (btn.getAttribute ? (btn.getAttribute('data-testid') || '') : '').toLowerCase();
+    const combined = `${cls} ${aria} ${title} ${testId}`;
+
+    if (/\b(play|pause|mute|unmute|volume|fullscreen|caption|subtitle|quality|speed|settings|pip|rewind|seek|seconds|chapters?)\b/.test(combined)) {
+      return false;
+    }
+
     return (
       cls.includes('swiper-button') || cls.includes('slick-arrow') ||
       cls.includes('pswp__button--arrow') || cls.includes('gallery-next') ||
-      cls.includes('gallery-prev') || cls.includes('close')
+      cls.includes('gallery-prev') || cls.includes('nav-btn') ||
+      /\b(close|dismiss|next|prev|previous|carousel-control|slider-arrow)\b/.test(combined) ||
+      /(arrow|chevron)[-_]?(left|right|prev|next)|(left|right|prev|next)[-_]?(arrow|chevron|btn|button)/.test(combined)
     );
+  }
+
+  function scheduleMediaSwitchCheck(prevEl) {
+    if (!prevEl || !config.resetOnMediaChange) return;
+    [60, 250, 450].forEach((delay) => {
+      setTimeout(() => {
+        if (config.resetOnMediaChange && activeElement === prevEl && hasMediaSwitchedAway(prevEl)) {
+          resetZoom(prevEl);
+        }
+      }, delay);
+    });
   }
 
   // Pointer & Mouse Down handling
@@ -1363,7 +1429,9 @@
     if (activeElement && activeState && activeState.scale > 1.0) {
       const clickedEl = e.target;
       if (clickedEl !== activeElement && !isDescendantOrSelf(clickedEl, activeElement) && isResetNavigationControl(clickedEl)) {
-        resetZoom(activeElement);
+        if (config.resetOnMediaChange) {
+          resetZoom(activeElement);
+        }
         return;
       }
 
@@ -1374,15 +1442,8 @@
         return;
       }
 
-      // Check after click in case the click closed a lightbox/modal (including animated fade-outs)
-      const prevEl = activeElement;
-      [60, 250, 450].forEach((delay) => {
-        setTimeout(() => {
-          if (activeElement === prevEl && (!prevEl.isConnected || !isVisible(prevEl))) {
-            resetZoom(prevEl);
-          }
-        }, delay);
-      });
+      // Check after click in case the click closed a lightbox/modal or slid carousel off-screen
+      scheduleMediaSwitchCheck(activeElement);
     }
   }
 
@@ -1543,7 +1604,14 @@
 
     const navKeys = ['PageDown', 'PageUp', 'Home', 'End'];
     if (navKeys.includes(e.key)) {
-      resetZoom(activeElement);
+      if (config.resetOnMediaChange) {
+        resetZoom(activeElement);
+      }
+      return;
+    }
+
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && config.resetOnMediaChange && !isTypingTarget(e.target)) {
+      scheduleMediaSwitchCheck(activeElement);
     }
   }
 

@@ -8,6 +8,7 @@ const translations = {
     maxZoomLabel: 'Max zoom:',
     kbdPanStepLabel: 'Pan step:',
     hideScrollbarsLabel: 'Hide scrollbars when zoomed:',
+    resetOnMediaChangeLabel: 'Reset focus on media change:',
     kbdZoomLabel: 'Keyboard zoom (center):',
     kbdInLabel: 'Zoom In',
     kbdOutLabel: 'Zoom Out',
@@ -37,6 +38,7 @@ const translations = {
     maxZoomLabel: 'Максимальний зум:',
     kbdPanStepLabel: 'Крок переміщення:',
     hideScrollbarsLabel: 'Приховувати скрол при зумі:',
+    resetOnMediaChangeLabel: 'Скидати фокус при зміні медіа:',
     kbdZoomLabel: 'Зум з клавіатури (у центр):',
     kbdInLabel: 'Наблизити',
     kbdOutLabel: 'Віддалити',
@@ -98,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const keyboardPanStep = document.getElementById('keyboardPanStep');
   const keyboardPanStepVal = document.getElementById('keyboardPanStepVal');
   const toggleHideScrollbars = document.getElementById('toggleHideScrollbars');
+  const toggleResetOnMediaChange = document.getElementById('toggleResetOnMediaChange');
   const toggleKeyboardZoom = document.getElementById('toggleKeyboardZoom');
   const kbdBindings = document.getElementById('kbdBindings');
   const toggleKeyboardPan = document.getElementById('toggleKeyboardPan');
@@ -165,6 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
     maxZoom: 15,
     language: defaultLang,
     hideScrollbars: true,
+    resetOnMediaChange: true,
     keyboardZoomEnabled: true,
     kbdZoomIn: defaultKbdIn,
     kbdZoomOut: defaultKbdOut,
@@ -184,6 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
     keyboardPanStep.value = panStep;
     keyboardPanStepVal.textContent = `${panStep}px`;
     toggleHideScrollbars.checked = items.hideScrollbars;
+    toggleResetOnMediaChange.checked = items.resetOnMediaChange;
     toggleKeyboardZoom.checked = items.keyboardZoomEnabled;
     kbdBindings.style.display = items.keyboardZoomEnabled ? 'grid' : 'none';
     bindings.in.combo = items.kbdZoomIn || defaultKbdIn;
@@ -231,6 +236,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   toggleHideScrollbars.addEventListener('change', () => {
     chrome.storage.sync.set({ hideScrollbars: toggleHideScrollbars.checked });
+  });
+
+  toggleResetOnMediaChange.addEventListener('change', () => {
+    chrome.storage.sync.set({ resetOnMediaChange: toggleResetOnMediaChange.checked });
   });
 
   toggleKeyboardZoom.addEventListener('change', () => {
