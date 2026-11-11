@@ -10,6 +10,8 @@ const translations = {
     kbdZoomLabel: 'Keyboard zoom (center):',
     kbdInLabel: 'Zoom In',
     kbdOutLabel: 'Zoom Out',
+    kbdPanUpLabel: 'Focus Up',
+    kbdPanDownLabel: 'Focus Down',
     kbdPanLabel: 'Pan with arrow keys:',
     optPanNone: '↑ ↓ ← → (Arrows only)',
     optPanShift: 'Shift + ↑ ↓ ← →',
@@ -36,6 +38,8 @@ const translations = {
     kbdZoomLabel: 'Зум з клавіатури (у центр):',
     kbdInLabel: 'Наблизити',
     kbdOutLabel: 'Віддалити',
+    kbdPanUpLabel: 'Фокус вище',
+    kbdPanDownLabel: 'Фокус нижче',
     kbdPanLabel: 'Переміщення стрілками:',
     optPanNone: '↑ ↓ ← → (лише стрілки)',
     optPanShift: 'Shift + ↑ ↓ ← →',
@@ -55,6 +59,8 @@ const translations = {
 
 const defaultKbdIn = { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowUp', key: 'ArrowUp' };
 const defaultKbdOut = { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowDown', key: 'ArrowDown' };
+const defaultKbdPanUp = { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowLeft', key: 'ArrowLeft' };
+const defaultKbdPanDown = { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowRight', key: 'ArrowRight' };
 
 function formatKeyCombo(combo) {
   if (!combo) return '';
@@ -90,8 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleHideScrollbars = document.getElementById('toggleHideScrollbars');
   const toggleKeyboardZoom = document.getElementById('toggleKeyboardZoom');
   const kbdBindings = document.getElementById('kbdBindings');
-  const bindZoomIn = document.getElementById('bindZoomIn');
-  const bindZoomOut = document.getElementById('bindZoomOut');
   const toggleKeyboardPan = document.getElementById('toggleKeyboardPan');
   const kbdPanOptions = document.getElementById('kbdPanOptions');
   const kbdPanModifier = document.getElementById('kbdPanModifier');
@@ -100,18 +104,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentLang = 'en';
   let recordingTarget = null;
-  let currentKbdIn = { ...defaultKbdIn };
-  let currentKbdOut = { ...defaultKbdOut };
+
+  const bindings = {
+    in: { btn: document.getElementById('bindZoomIn'), storageKey: 'kbdZoomIn', combo: { ...defaultKbdIn } },
+    out: { btn: document.getElementById('bindZoomOut'), storageKey: 'kbdZoomOut', combo: { ...defaultKbdOut } },
+    up: { btn: document.getElementById('bindPanUp'), storageKey: 'kbdPanUp', combo: { ...defaultKbdPanUp } },
+    down: { btn: document.getElementById('bindPanDown'), storageKey: 'kbdPanDown', combo: { ...defaultKbdPanDown } }
+  };
 
   function updateBindingButtons() {
-    if (recordingTarget !== 'in') {
-      bindZoomIn.textContent = formatKeyCombo(currentKbdIn);
-      bindZoomIn.classList.remove('recording');
-    }
-    if (recordingTarget !== 'out') {
-      bindZoomOut.textContent = formatKeyCombo(currentKbdOut);
-      bindZoomOut.classList.remove('recording');
-    }
+    Object.entries(bindings).forEach(([key, entry]) => {
+      if (recordingTarget !== key) {
+        entry.btn.textContent = formatKeyCombo(entry.combo);
+        entry.btn.classList.remove('recording');
+      }
+    });
   }
 
   function applyLanguage(lang) {
@@ -140,8 +147,9 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    if (recordingTarget === 'in') bindZoomIn.textContent = dict.pressKeys;
-    if (recordingTarget === 'out') bindZoomOut.textContent = dict.pressKeys;
+    if (recordingTarget && bindings[recordingTarget]) {
+      bindings[recordingTarget].btn.textContent = dict.pressKeys;
+    }
   }
 
   const defaultLang = (navigator.language || 'en').toLowerCase().startsWith('uk') ? 'uk' : 'en';
@@ -156,6 +164,8 @@ document.addEventListener('DOMContentLoaded', () => {
     keyboardZoomEnabled: false,
     kbdZoomIn: defaultKbdIn,
     kbdZoomOut: defaultKbdOut,
+    kbdPanUp: defaultKbdPanUp,
+    kbdPanDown: defaultKbdPanDown,
     keyboardPanEnabled: false,
     keyboardPanModifier: 'none'
   }, (items) => {
@@ -168,8 +178,10 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleHideScrollbars.checked = items.hideScrollbars;
     toggleKeyboardZoom.checked = items.keyboardZoomEnabled;
     kbdBindings.style.display = items.keyboardZoomEnabled ? 'grid' : 'none';
-    currentKbdIn = items.kbdZoomIn || defaultKbdIn;
-    currentKbdOut = items.kbdZoomOut || defaultKbdOut;
+    bindings.in.combo = items.kbdZoomIn || defaultKbdIn;
+    bindings.out.combo = items.kbdZoomOut || defaultKbdOut;
+    bindings.up.combo = items.kbdPanUp || defaultKbdPanUp;
+    bindings.down.combo = items.kbdPanDown || defaultKbdPanDown;
     toggleKeyboardPan.checked = items.keyboardPanEnabled;
     kbdPanOptions.style.display = items.keyboardPanEnabled ? 'block' : 'none';
     kbdPanModifier.value = items.keyboardPanModifier || 'none';
@@ -230,8 +242,9 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.classList.add('recording');
   }
 
-  bindZoomIn.addEventListener('click', () => startRecording('in', bindZoomIn));
-  bindZoomOut.addEventListener('click', () => startRecording('out', bindZoomOut));
+  Object.entries(bindings).forEach(([key, entry]) => {
+    entry.btn.addEventListener('click', () => startRecording(key, entry.btn));
+  });
 
   document.addEventListener('keydown', (e) => {
     if (!recordingTarget) return;
@@ -258,12 +271,10 @@ document.addEventListener('DOMContentLoaded', () => {
       key: e.key
     };
 
-    if (recordingTarget === 'in') {
-      currentKbdIn = combo;
-      chrome.storage.sync.set({ kbdZoomIn: combo });
-    } else {
-      currentKbdOut = combo;
-      chrome.storage.sync.set({ kbdZoomOut: combo });
+    const entry = bindings[recordingTarget];
+    if (entry) {
+      entry.combo = combo;
+      chrome.storage.sync.set({ [entry.storageKey]: combo });
     }
 
     recordingTarget = null;

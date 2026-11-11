@@ -12,6 +12,8 @@
     keyboardZoomEnabled: false,
     kbdZoomIn: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowUp', key: 'ArrowUp' },
     kbdZoomOut: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowDown', key: 'ArrowDown' },
+    kbdPanUp: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowLeft', key: 'ArrowLeft' },
+    kbdPanDown: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowRight', key: 'ArrowRight' },
     keyboardPanEnabled: false,
     keyboardPanModifier: 'none'
   };
@@ -32,7 +34,7 @@
     chrome.storage.sync.get([
       'enabled', 'modifierKey', 'zoomSpeed', 'maxZoom',
       'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut',
-      'keyboardPanEnabled', 'keyboardPanModifier'
+      'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier'
     ], (items) => {
       if (items.enabled !== undefined) config.enabled = items.enabled;
       if (items.modifierKey) config.modifierKey = items.modifierKey;
@@ -42,6 +44,8 @@
       if (items.keyboardZoomEnabled !== undefined) config.keyboardZoomEnabled = items.keyboardZoomEnabled;
       if (items.kbdZoomIn) config.kbdZoomIn = items.kbdZoomIn;
       if (items.kbdZoomOut) config.kbdZoomOut = items.kbdZoomOut;
+      if (items.kbdPanUp) config.kbdPanUp = items.kbdPanUp;
+      if (items.kbdPanDown) config.kbdPanDown = items.kbdPanDown;
       if (items.keyboardPanEnabled !== undefined) config.keyboardPanEnabled = items.keyboardPanEnabled;
       if (items.keyboardPanModifier) config.keyboardPanModifier = items.keyboardPanModifier;
     });
@@ -59,6 +63,8 @@
         if (changes.keyboardZoomEnabled) config.keyboardZoomEnabled = changes.keyboardZoomEnabled.newValue;
         if (changes.kbdZoomIn) config.kbdZoomIn = changes.kbdZoomIn.newValue;
         if (changes.kbdZoomOut) config.kbdZoomOut = changes.kbdZoomOut.newValue;
+        if (changes.kbdPanUp) config.kbdPanUp = changes.kbdPanUp.newValue;
+        if (changes.kbdPanDown) config.kbdPanDown = changes.kbdPanDown.newValue;
         if (changes.keyboardPanEnabled) config.keyboardPanEnabled = changes.keyboardPanEnabled.newValue;
         if (changes.keyboardPanModifier) config.keyboardPanModifier = changes.keyboardPanModifier.newValue;
       }
@@ -1436,6 +1442,20 @@
     ArrowRight: [-1, 0]
   };
 
+  function applyKeyboardPan(e, dx, dy, speedBoost = 1) {
+    if (!activeElement || !activeState) return;
+    if (!activeElement.isConnected || !isVisible(activeElement)) {
+      resetZoom(activeElement);
+      return;
+    }
+    blockKeyEvent(e);
+    if (e.code) blockedKeyCodes.add(e.code);
+    const step = Math.max(30, Math.round(45 * config.wheelPanSpeed)) * speedBoost;
+    activeState.panX += dx * step;
+    activeState.panY += dy * step;
+    applyTransform(activeElement, activeState.scale, activeState.panX, activeState.panY);
+  }
+
   // Keyboard zoom + arrow pan + navigation resets
   function onKeyDown(e) {
     if (config.enabled && config.keyboardZoomEnabled && !isTypingTarget(e.target)) {
@@ -1478,6 +1498,15 @@
           return;
         }
       }
+
+      if (activeElement && activeState && activeState.scale > 1.0) {
+        const isPanUp = matchesKeyCombo(e, config.kbdPanUp);
+        const isPanDown = !isPanUp && matchesKeyCombo(e, config.kbdPanDown);
+        if (isPanUp || isPanDown) {
+          applyKeyboardPan(e, 0, isPanUp ? 1 : -1, 1);
+          return;
+        }
+      }
     }
 
     const panDir = KEYBOARD_PAN_DELTAS[e.key] || KEYBOARD_PAN_DELTAS[e.code];
@@ -1491,17 +1520,8 @@
       !isTypingTarget(e.target) &&
       matchesPanModifier(e, config.keyboardPanModifier)
     ) {
-      if (!activeElement.isConnected || !isVisible(activeElement)) {
-        resetZoom(activeElement);
-        return;
-      }
-      blockKeyEvent(e);
-      if (e.code) blockedKeyCodes.add(e.code);
       const speedBoost = (config.keyboardPanModifier === 'none' && e.shiftKey) ? 2.5 : 1;
-      const step = Math.max(30, Math.round(45 * config.wheelPanSpeed)) * speedBoost;
-      activeState.panX += panDir[0] * step;
-      activeState.panY += panDir[1] * step;
-      applyTransform(activeElement, activeState.scale, activeState.panX, activeState.panY);
+      applyKeyboardPan(e, panDir[0], panDir[1], speedBoost);
       return;
     }
 
