@@ -11,7 +11,9 @@
     hideScrollbars: true,
     keyboardZoomEnabled: false,
     kbdZoomIn: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowUp', key: 'ArrowUp' },
-    kbdZoomOut: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowDown', key: 'ArrowDown' }
+    kbdZoomOut: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowDown', key: 'ArrowDown' },
+    keyboardPanEnabled: false,
+    keyboardPanModifier: 'none'
   };
 
   // Check support for individual transform properties (Chrome 104+)
@@ -29,7 +31,8 @@
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
     chrome.storage.sync.get([
       'enabled', 'modifierKey', 'zoomSpeed', 'maxZoom',
-      'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut'
+      'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut',
+      'keyboardPanEnabled', 'keyboardPanModifier'
     ], (items) => {
       if (items.enabled !== undefined) config.enabled = items.enabled;
       if (items.modifierKey) config.modifierKey = items.modifierKey;
@@ -39,6 +42,8 @@
       if (items.keyboardZoomEnabled !== undefined) config.keyboardZoomEnabled = items.keyboardZoomEnabled;
       if (items.kbdZoomIn) config.kbdZoomIn = items.kbdZoomIn;
       if (items.kbdZoomOut) config.kbdZoomOut = items.kbdZoomOut;
+      if (items.keyboardPanEnabled !== undefined) config.keyboardPanEnabled = items.keyboardPanEnabled;
+      if (items.keyboardPanModifier) config.keyboardPanModifier = items.keyboardPanModifier;
     });
 
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -54,6 +59,8 @@
         if (changes.keyboardZoomEnabled) config.keyboardZoomEnabled = changes.keyboardZoomEnabled.newValue;
         if (changes.kbdZoomIn) config.kbdZoomIn = changes.kbdZoomIn.newValue;
         if (changes.kbdZoomOut) config.kbdZoomOut = changes.kbdZoomOut.newValue;
+        if (changes.keyboardPanEnabled) config.keyboardPanEnabled = changes.keyboardPanEnabled.newValue;
+        if (changes.keyboardPanModifier) config.keyboardPanModifier = changes.keyboardPanModifier.newValue;
       }
     });
   }
@@ -1414,7 +1421,22 @@
     }
   }
 
-  // Keyboard zoom + navigation resets
+  function matchesPanModifier(e, mod) {
+    if (mod === 'none') return !e.ctrlKey && !e.altKey && !e.metaKey;
+    if (mod === 'shift') return e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
+    if (mod === 'alt') return e.altKey && !e.ctrlKey && !e.metaKey;
+    if (mod === 'ctrl') return (e.ctrlKey || e.metaKey) && !e.altKey;
+    return false;
+  }
+
+  const KEYBOARD_PAN_DELTAS = {
+    ArrowUp: [0, 1],
+    ArrowDown: [0, -1],
+    ArrowLeft: [1, 0],
+    ArrowRight: [-1, 0]
+  };
+
+  // Keyboard zoom + arrow pan + navigation resets
   function onKeyDown(e) {
     if (config.enabled && config.keyboardZoomEnabled && !isTypingTarget(e.target)) {
       const isZoomIn = matchesKeyCombo(e, config.kbdZoomIn);
@@ -1456,6 +1478,31 @@
           return;
         }
       }
+    }
+
+    const panDir = KEYBOARD_PAN_DELTAS[e.key] || KEYBOARD_PAN_DELTAS[e.code];
+    if (
+      config.enabled &&
+      config.keyboardPanEnabled &&
+      panDir &&
+      activeElement &&
+      activeState &&
+      activeState.scale > 1.0 &&
+      !isTypingTarget(e.target) &&
+      matchesPanModifier(e, config.keyboardPanModifier)
+    ) {
+      if (!activeElement.isConnected || !isVisible(activeElement)) {
+        resetZoom(activeElement);
+        return;
+      }
+      blockKeyEvent(e);
+      if (e.code) blockedKeyCodes.add(e.code);
+      const speedBoost = (config.keyboardPanModifier === 'none' && e.shiftKey) ? 2.5 : 1;
+      const step = Math.max(30, Math.round(45 * config.wheelPanSpeed)) * speedBoost;
+      activeState.panX += panDir[0] * step;
+      activeState.panY += panDir[1] * step;
+      applyTransform(activeElement, activeState.scale, activeState.panX, activeState.panY);
+      return;
     }
 
     if (!activeElement) return;

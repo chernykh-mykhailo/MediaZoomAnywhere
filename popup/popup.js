@@ -10,6 +10,11 @@ const translations = {
     kbdZoomLabel: 'Keyboard zoom (center):',
     kbdInLabel: 'Zoom In',
     kbdOutLabel: 'Zoom Out',
+    kbdPanLabel: 'Pan with arrow keys:',
+    optPanNone: '↑ ↓ ← → (Arrows only)',
+    optPanShift: 'Shift + ↑ ↓ ← →',
+    optPanAlt: 'Alt + ↑ ↓ ← →',
+    optPanCtrl: 'Ctrl / Cmd + ↑ ↓ ← →',
     pressKeys: 'Press keys...',
     controlsTitle: 'Controls (Windows / Mac):',
     tips: [
@@ -31,6 +36,11 @@ const translations = {
     kbdZoomLabel: 'Зум з клавіатури (у центр):',
     kbdInLabel: 'Наблизити',
     kbdOutLabel: 'Віддалити',
+    kbdPanLabel: 'Переміщення стрілками:',
+    optPanNone: '↑ ↓ ← → (лише стрілки)',
+    optPanShift: 'Shift + ↑ ↓ ← →',
+    optPanAlt: 'Alt + ↑ ↓ ← →',
+    optPanCtrl: 'Ctrl / Cmd + ↑ ↓ ← →',
     pressKeys: 'Натисніть клавіші...',
     controlsTitle: 'Керування (Windows / Mac):',
     tips: [
@@ -82,6 +92,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const kbdBindings = document.getElementById('kbdBindings');
   const bindZoomIn = document.getElementById('bindZoomIn');
   const bindZoomOut = document.getElementById('bindZoomOut');
+  const toggleKeyboardPan = document.getElementById('toggleKeyboardPan');
+  const kbdPanOptions = document.getElementById('kbdPanOptions');
+  const kbdPanModifier = document.getElementById('kbdPanModifier');
   const langToggle = document.getElementById('langToggle');
   const tipsList = document.querySelector('.tips ul');
 
@@ -142,7 +155,9 @@ document.addEventListener('DOMContentLoaded', () => {
     hideScrollbars: true,
     keyboardZoomEnabled: false,
     kbdZoomIn: defaultKbdIn,
-    kbdZoomOut: defaultKbdOut
+    kbdZoomOut: defaultKbdOut,
+    keyboardPanEnabled: false,
+    keyboardPanModifier: 'none'
   }, (items) => {
     toggleEnabled.checked = items.enabled;
     modifierKey.value = items.modifierKey;
@@ -155,6 +170,9 @@ document.addEventListener('DOMContentLoaded', () => {
     kbdBindings.style.display = items.keyboardZoomEnabled ? 'grid' : 'none';
     currentKbdIn = items.kbdZoomIn || defaultKbdIn;
     currentKbdOut = items.kbdZoomOut || defaultKbdOut;
+    toggleKeyboardPan.checked = items.keyboardPanEnabled;
+    kbdPanOptions.style.display = items.keyboardPanEnabled ? 'block' : 'none';
+    kbdPanModifier.value = items.keyboardPanModifier || 'none';
     updateBindingButtons();
     applyLanguage(items.language);
   });
@@ -193,6 +211,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const enabled = toggleKeyboardZoom.checked;
     kbdBindings.style.display = enabled ? 'grid' : 'none';
     chrome.storage.sync.set({ keyboardZoomEnabled: enabled });
+  });
+
+  toggleKeyboardPan.addEventListener('change', () => {
+    const enabled = toggleKeyboardPan.checked;
+    kbdPanOptions.style.display = enabled ? 'block' : 'none';
+    chrome.storage.sync.set({ keyboardPanEnabled: enabled });
+  });
+
+  kbdPanModifier.addEventListener('change', () => {
+    chrome.storage.sync.set({ keyboardPanModifier: kbdPanModifier.value });
   });
 
   function startRecording(target, btn) {

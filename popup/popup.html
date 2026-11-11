@@ -81,6 +81,24 @@
       </div>
     </div>
 
+    <div class="setting-row kbd-section">
+      <div class="kbd-header">
+        <label for="toggleKeyboardPan" data-i18n="kbdPanLabel">Pan with arrow keys:</label>
+        <label class="switch switch-sm">
+          <input type="checkbox" id="toggleKeyboardPan">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="kbd-pan-options" id="kbdPanOptions" style="display: none;">
+        <select id="kbdPanModifier">
+          <option value="none" data-i18n="optPanNone">↑ ↓ ← → (Arrows only)</option>
+          <option value="shift" data-i18n="optPanShift">Shift + ↑ ↓ ← →</option>
+          <option value="alt" data-i18n="optPanAlt">Alt + ↑ ↓ ← →</option>
+          <option value="ctrl" data-i18n="optPanCtrl">Ctrl / Cmd + ↑ ↓ ← →</option>
+        </select>
+      </div>
+    </div>
+
     <div class="tips">
       <div class="tip-title" data-i18n="controlsTitle">Controls (Windows / Mac):</div>
       <ul>

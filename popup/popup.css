@@ -185,6 +185,15 @@ input[type="range"] {
   margin-top: 10px;
 }
 
+.kbd-pan-options {
+  margin-top: 8px;
+}
+
+.kbd-pan-options select {
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
 .kbd-field {
   display: flex;
   flex-direction: column;
