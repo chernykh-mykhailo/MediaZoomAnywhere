@@ -109,8 +109,41 @@
     return e.ctrlKey || e.metaKey;
   }
 
+  function getElementClassString(el) {
+    if (!el || !(el instanceof Element)) return '';
+    return typeof el.className === 'string' ? el.className : (el.getAttribute('class') || '');
+  }
+
+  function getParentAcrossShadow(node) {
+    if (!node) return null;
+    if (node.parentElement) return node.parentElement;
+    const root = node.getRootNode ? node.getRootNode() : null;
+    if (root && typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) {
+      return root.host || null;
+    }
+    return null;
+  }
+
+  function isDescendantOrSelf(el, ancestor) {
+    let cur = el;
+    while (cur) {
+      if (cur === ancestor) return true;
+      cur = cur.parentNode || (typeof ShadowRoot !== 'undefined' && cur instanceof ShadowRoot ? cur.host : null);
+    }
+    return false;
+  }
+
+  function isSpacerOrTransparentShield(el) {
+    if (!el || !(el instanceof Element)) return false;
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'img' && el.complete && el.naturalWidth > 0 && el.naturalWidth <= 2 && el.naturalHeight <= 2) {
+      return true;
+    }
+    return false;
+  }
+
   function isVisible(el) {
-    if (!el || !(el instanceof Element) || !document.contains(el)) return false;
+    if (!el || !(el instanceof Element) || !el.isConnected) return false;
     if (typeof el.checkVisibility === 'function') {
       if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
         return false;
@@ -119,7 +152,64 @@
     const rect = el.getBoundingClientRect();
     if (rect.width < 10 || rect.height < 10) return false;
     const style = window.getComputedStyle(el);
-    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+    return (
+      style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      parseFloat(style.opacity) > 0.02
+    );
+  }
+
+  function getVisibleClippedRect(el, stopAtAncestor = null) {
+    if (!el || !(el instanceof Element) || !el.isConnected) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 10 || rect.height < 10) return null;
+
+    const vpW = window.innerWidth;
+    const vpH = window.innerHeight;
+    let left = Math.max(rect.left, 0);
+    let top = Math.max(rect.top, 0);
+    let right = Math.min(rect.right, vpW);
+    let bottom = Math.min(rect.bottom, vpH);
+
+    if (right <= left || bottom <= top) return null;
+
+    const elStyle = window.getComputedStyle(el);
+    if (elStyle.position !== 'fixed') {
+      let childIsAbsolute = elStyle.position === 'absolute';
+      let p = getParentAcrossShadow(el);
+      while (p && p !== document.documentElement) {
+        const pStyle = window.getComputedStyle(p);
+        const isPositioned = pStyle.position !== 'static' || pStyle.transform !== 'none' || pStyle.filter !== 'none' || pStyle.contain === 'paint';
+        const clipX = pStyle.overflowX === 'hidden' || pStyle.overflowX === 'clip' || pStyle.overflowX === 'scroll' || pStyle.overflowX === 'auto';
+        const clipY = pStyle.overflowY === 'hidden' || pStyle.overflowY === 'clip' || pStyle.overflowY === 'scroll' || pStyle.overflowY === 'auto';
+
+        if (!childIsAbsolute || isPositioned || pStyle.overflowX === 'clip' || pStyle.overflowY === 'clip') {
+          if (clipX || clipY) {
+            const pRect = p.getBoundingClientRect();
+            if (clipX && (!childIsAbsolute || isPositioned || pStyle.overflowX === 'clip')) {
+              left = Math.max(left, pRect.left);
+              right = Math.min(right, pRect.right);
+            }
+            if (clipY && (!childIsAbsolute || isPositioned || pStyle.overflowY === 'clip')) {
+              top = Math.max(top, pRect.top);
+              bottom = Math.min(bottom, pRect.bottom);
+            }
+            if (right <= left || bottom <= top) return null;
+          }
+          if (isPositioned) {
+            childIsAbsolute = pStyle.position === 'absolute';
+          }
+        }
+
+        if (p === stopAtAncestor || pStyle.position === 'fixed') break;
+        p = getParentAcrossShadow(p);
+      }
+    }
+
+    const width = right - left;
+    const height = bottom - top;
+    if (width < 10 || height < 10) return null;
+    return { left, top, right, bottom, width, height, area: width * height };
   }
 
   function isMediaNode(el) {
@@ -145,17 +235,29 @@
 
   function isWatermarkOrOverlay(el) {
     if (!el || !(el instanceof Element)) return false;
-    const str = `${el.className || ''} ${el.id || ''} ${el.getAttribute('data-testid') || ''} ${el.getAttribute('aria-label') || ''}`.toLowerCase();
+    const str = `${getElementClassString(el)} ${el.id || ''} ${el.getAttribute('data-testid') || ''} ${el.getAttribute('aria-label') || ''}`.toLowerCase();
     if (/watermark|wm-layer|wm_|protect|shield|stamp|backdrop|vignette|click-blocker|click-catcher/i.test(str)) {
       return true;
     }
     return false;
   }
 
-  function isModalElement(el) {
+  function isOpaqueBackground(el) {
+    if (!el || el === document.body || el === document.documentElement) return false;
+    const style = window.getComputedStyle(el);
+    if (parseFloat(style.opacity) < 0.85) return false;
+    const bg = style.backgroundColor;
+    if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') return false;
+    const match = bg.match(/rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+(?:\s*[,/]\s*([\d.]+))?\s*\)/i);
+    if (!match) return false;
+    const alpha = match[1] !== undefined ? parseFloat(match[1]) : 1;
+    return alpha >= 0.85;
+  }
+
+  function isInlineViewerElement(el) {
     if (!el || !(el instanceof Element)) return false;
     const role = el.getAttribute ? el.getAttribute('role') : null;
-    const className = String(el.className || '').toLowerCase();
+    const className = getElementClassString(el).toLowerCase();
     return (
       role === 'dialog' ||
       el.hasAttribute('aria-modal') ||
@@ -163,7 +265,6 @@
       className.includes('lightbox') ||
       className.includes('viewer') ||
       className.includes('dialog') ||
-      className.includes('gallery') ||
       className.includes('carousel') ||
       className.includes('slider') ||
       className.includes('swiper') ||
@@ -173,97 +274,326 @@
     );
   }
 
-  function findLargestMedia(container = document) {
-    // 1. Highest priority: visible <video>
-    const videos = container.querySelectorAll('video');
-    for (const v of videos) {
-      if (isVisible(v) && !isWatermarkOrOverlay(v)) return v;
-    }
+  function collectMediaNodes(container, includeShadow = false) {
+    const results = [];
+    const seen = new Set();
 
-    // 2. Second priority: visible <img> / picture (filtering out watermarks and tiny icons)
-    const list = container.querySelectorAll('img, picture');
-    let bestImg = null;
-    let maxImgArea = 0;
-    const vpW = window.innerWidth;
-    const vpH = window.innerHeight;
-
-    for (const item of list) {
-      const el = resolveMediaNode(item);
-      if (!isVisible(el) || isWatermarkOrOverlay(el)) continue;
-      const rect = el.getBoundingClientRect();
-      // Ignore tiny icons / avatars (< 50x50)
-      if (rect.width < 50 || rect.height < 50) continue;
-      if (rect.right < 0 || rect.bottom < 0 || rect.left > vpW || rect.top > vpH) continue;
-      const visibleW = Math.min(rect.right, vpW) - Math.max(rect.left, 0);
-      const visibleH = Math.min(rect.bottom, vpH) - Math.max(rect.top, 0);
-      const area = visibleW * visibleH;
-      if (area > maxImgArea) {
-        maxImgArea = area;
-        bestImg = el;
+    function scan(root) {
+      if (!root || !root.querySelectorAll) return;
+      const nodes = root.querySelectorAll('video, img, picture, canvas');
+      for (const n of nodes) {
+        if (!seen.has(n)) {
+          seen.add(n);
+          results.push(n);
+        }
       }
-    }
-    if (bestImg) return bestImg;
-
-    // 3. Third priority: <canvas> (only if not a watermark and reasonable size >= 80x80)
-    const canvases = container.querySelectorAll('canvas');
-    let bestCanvas = null;
-    let maxCanvasArea = 0;
-    for (const c of canvases) {
-      if (!isVisible(c) || isWatermarkOrOverlay(c)) continue;
-      const rect = c.getBoundingClientRect();
-      if (rect.width < 80 || rect.height < 80) continue;
-      const area = rect.width * rect.height;
-      if (area > maxCanvasArea) {
-        maxCanvasArea = area;
-        bestCanvas = c;
-      }
-    }
-    return bestCanvas;
-  }
-
-  function getActiveViewer(x, y) {
-    const elements = (x !== undefined && y !== undefined) ? (document.elementsFromPoint(x, y) || []) : [];
-
-    // 1. Check elements under cursor or their ancestors
-    for (const el of elements) {
-      if (el === document.body || el === document.documentElement) continue;
-      if (isModalElement(el) && isVisible(el)) return el;
-      const parentModal = el.closest(
-        '[role="dialog"], [aria-modal="true"], .pswp, .viewer-container, .fancybox__container, ' +
-        '[class*="lightbox"], [class*="viewer"], [class*="modal"], [class*="gallery"], [class*="player"]'
-      );
-      if (parentModal && isVisible(parentModal)) return parentModal;
-    }
-
-    // 2. Check for full-screen fixed/absolute overlay under cursor
-    const vpW = window.innerWidth;
-    const vpH = window.innerHeight;
-    for (const el of elements) {
-      if (el === document.body || el === document.documentElement) continue;
-      const style = window.getComputedStyle(el);
-      if ((style.position === 'fixed' || style.position === 'absolute') && isVisible(el)) {
-        const rect = el.getBoundingClientRect();
-        if (rect.width >= vpW * 0.65 && rect.height >= vpH * 0.65) {
-          return el;
+      if (includeShadow) {
+        const all = root.querySelectorAll('*');
+        for (const el of all) {
+          if (el.shadowRoot) {
+            scan(el.shadowRoot);
+          }
         }
       }
     }
 
-    // 3. Check document-wide for active/open modals or players
-    const openModals = document.querySelectorAll(
-      '[role="dialog"]:not([aria-hidden="true"]), [aria-modal="true"], .pswp--open, .viewer-container, ' +
-      '.lightbox.active, .lightbox.open, .lightbox.show, .modal.show, .modal.active, .modal.open, .modal.is-active, ' +
-      '.html5-video-player, #movie_player'
-    );
-    for (const m of openModals) {
-      if (isVisible(m)) return m;
+    if (includeShadow && container instanceof Element && container.shadowRoot) {
+      scan(container.shadowRoot);
+    }
+    scan(container);
+    return results;
+  }
+
+  function findLargestMedia(container = document, minSize = 50) {
+    const includeShadow = container !== document;
+    const stopAt = container === document ? null : container;
+
+    if (container instanceof Element && isMediaNode(container)) {
+      const resolved = resolveMediaNode(container);
+      if (isVisible(resolved) && !isWatermarkOrOverlay(resolved) && !isSpacerOrTransparentShield(resolved)) {
+        if (getVisibleClippedRect(resolved, null)) return resolved;
+      }
+    }
+
+    const candidates = collectMediaNodes(container, includeShadow);
+    let bestVideo = null;
+    let bestVideoArea = 0;
+    let bestImg = null;
+    let bestImgArea = 0;
+    let bestCanvas = null;
+    let bestCanvasArea = 0;
+
+    for (const item of candidates) {
+      const el = resolveMediaNode(item);
+      if (!isVisible(el) || isWatermarkOrOverlay(el) || isSpacerOrTransparentShield(el)) continue;
+      const clipped = getVisibleClippedRect(el, stopAt);
+      if (!clipped) continue;
+
+      const tag = el.tagName.toLowerCase();
+      if (tag === 'video') {
+        if (clipped.width < Math.min(minSize, 40) || clipped.height < Math.min(minSize, 40)) continue;
+        if (clipped.area > bestVideoArea) {
+          bestVideoArea = clipped.area;
+          bestVideo = el;
+        }
+      } else if (tag === 'img') {
+        if (clipped.width < minSize || clipped.height < minSize) continue;
+        if (clipped.area > bestImgArea) {
+          bestImgArea = clipped.area;
+          bestImg = el;
+        }
+      } else if (tag === 'canvas') {
+        if (clipped.width < Math.max(minSize, 80) || clipped.height < Math.max(minSize, 80)) continue;
+        if (clipped.area > bestCanvasArea) {
+          bestCanvasArea = clipped.area;
+          bestCanvas = el;
+        }
+      }
+    }
+
+    if (bestVideo) {
+      // Only let a tiny video thumbnail lose to a giant primary image in the same viewer
+      if (!bestImg || bestVideoArea >= bestImgArea * 0.25 || (bestVideoArea >= 30000 && bestVideoArea >= bestImgArea * 0.15)) {
+        return bestVideo;
+      }
+      return bestImg;
+    }
+    if (bestImg) return bestImg;
+    if (bestCanvas) return bestCanvas;
+
+    // Fallback for viewer containers using CSS background-image
+    if (container !== document && container.querySelectorAll) {
+      let bestBg = null;
+      let bestBgArea = 0;
+      const els = container.querySelectorAll('*');
+      for (const el of els) {
+        if (!hasBackgroundImage(el) || !isVisible(el) || isWatermarkOrOverlay(el)) continue;
+        const clipped = getVisibleClippedRect(el, stopAt);
+        if (!clipped || clipped.width < 80 || clipped.height < 80) continue;
+        if (clipped.area > bestBgArea) {
+          bestBgArea = clipped.area;
+          bestBg = el;
+        }
+      }
+      if (bestBg) return bestBg;
+    }
+
+    return null;
+  }
+
+  const EXPLICIT_MODAL_SELECTOR = [
+    'dialog[open]',
+    '[role="dialog"]:not([aria-hidden="true"])',
+    '[aria-modal="true"]:not([aria-hidden="true"])',
+    '.pswp--open',
+    '.fancybox__container',
+    '.fancybox-container',
+    '.lg-outer.lg-show',
+    '.mfp-wrap',
+    '.glightbox-container',
+    '.yarl__root',
+    '.ril__outer',
+    '#baguetteBox-overlay.visible',
+    '#colorbox',
+    '.viewer-container',
+    '.modal.show',
+    '.modal.active',
+    '.modal.open',
+    '.modal.is-active',
+    '.lightbox.active',
+    '.lightbox.open',
+    '.lightbox.show',
+    '.medium-zoom-image--opened',
+    'shreddit-media-lightbox',
+    '[class*="lightbox"]:not([aria-hidden="true"])',
+    '[class*="media-viewer"]:not([aria-hidden="true"])',
+    '[class*="mediaviewer"]:not([aria-hidden="true"])',
+    '[class*="image-viewer"]:not([aria-hidden="true"])',
+    '[class*="photo-viewer"]:not([aria-hidden="true"])',
+    '[id*="MediaViewer"]:not([aria-hidden="true"])',
+    '[id*="lightbox"]:not([aria-hidden="true"])'
+  ].join(', ');
+
+  function isAppShellElement(el) {
+    if (!el || el === document.body || el === document.documentElement) return true;
+    const id = (el.id || '').toLowerCase();
+    return id === 'app' || id === 'root' || id === '__next' || id === '__nuxt';
+  }
+
+  function getNumericZIndex(el) {
+    const z = parseInt(window.getComputedStyle(el).zIndex, 10);
+    return Number.isNaN(z) ? 0 : z;
+  }
+
+  function isActuallyOpenOverlay(el) {
+    if (!el || !isVisible(el)) return false;
+    if (el.closest && el.closest('[aria-hidden="true"]')) return false;
+    if (isAppShellElement(el)) return false;
+
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'dialog' && el.hasAttribute('open')) return true;
+    if (el.getAttribute('aria-modal') === 'true') return true;
+    if (el.getAttribute('role') === 'dialog') return true;
+    if (el.classList.contains('medium-zoom-image--opened')) return true;
+    if (el.matches && el.matches(
+      '.pswp--open, .fancybox__container, .fancybox-container, .lg-outer.lg-show, .mfp-wrap, ' +
+      '.glightbox-container, .yarl__root, .ril__outer, #baguetteBox-overlay.visible, .viewer-container, ' +
+      '.modal.show, .modal.active, .modal.open, .modal.is-active, .lightbox.active, .lightbox.open, .lightbox.show, shreddit-media-lightbox'
+    )) {
+      return true;
+    }
+
+    const vpW = window.innerWidth;
+    const vpH = window.innerHeight;
+    let cur = el;
+    while (cur && cur !== document.body && cur !== document.documentElement) {
+      const style = window.getComputedStyle(cur);
+      if (style.position === 'fixed') {
+        const rect = cur.getBoundingClientRect();
+        if (rect.width >= vpW * 0.4 && rect.height >= vpH * 0.4) return true;
+        if (getNumericZIndex(cur) >= 10) return true;
+      }
+      if (style.position === 'absolute' && getNumericZIndex(cur) >= 50) {
+        const rect = cur.getBoundingClientRect();
+        if (rect.width >= vpW * 0.5 && rect.height >= vpH * 0.5) return true;
+      }
+      cur = getParentAcrossShadow(cur);
+    }
+    return false;
+  }
+
+  function findOpenModalInRoot(root) {
+    if (!root || !root.querySelectorAll) return null;
+    const candidates = Array.from(root.querySelectorAll(EXPLICIT_MODAL_SELECTOR));
+    const valid = [];
+
+    for (const el of candidates) {
+      if (!isActuallyOpenOverlay(el)) continue;
+      const media = findLargestMedia(el, 80);
+      if (!media) continue;
+      valid.push({ viewer: el, media, z: getNumericZIndex(el) });
+    }
+
+    if (valid.length === 0) return null;
+
+    // Prefer outermost container of the same modal so inner sub-containers (e.g. z-indexed thumbnail strips) don't trap us,
+    // while preferring higher z-index / later DOM order across distinct stacked modals.
+    const topLevel = valid.filter((item) => !valid.some((other) => other !== item && other.viewer.contains(item.viewer)));
+    const pool = topLevel.length > 0 ? topLevel : valid;
+    pool.sort((a, b) => a.z - b.z);
+    return pool[pool.length - 1];
+  }
+
+  function getOpenModalViewer() {
+    // 1. Native Fullscreen API
+    const fs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fs && fs.isConnected) {
+      const fsMedia = findLargestMedia(fs, 50);
+      if (fsMedia) return { viewer: fs, media: fsMedia };
+    }
+
+    // 2. Explicit ARIA dialogs, <dialog open>, known lightbox/viewer modals
+    const explicit = findOpenModalInRoot(document);
+    if (explicit) return explicit;
+
+    // 3. Generic viewport-center overlay / Tailwind modal / Shadow DOM modal check
+    const vpW = window.innerWidth;
+    const vpH = window.innerHeight;
+    const centerElements = document.elementsFromPoint(vpW / 2, vpH / 2) || [];
+    let hasFixedBackdrop = false;
+
+    for (const el of centerElements) {
+      if (isAppShellElement(el) || el.classList.contains('mza-zoom-badge')) continue;
+      const style = window.getComputedStyle(el);
+      if (style.position === 'fixed') {
+        const r = el.getBoundingClientRect();
+        if (r.width >= vpW * 0.6 && r.height >= vpH * 0.6 && getNumericZIndex(el) >= 1) {
+          hasFixedBackdrop = true;
+          break;
+        }
+      }
+    }
+
+    for (const el of centerElements) {
+      if (isAppShellElement(el) || el.classList.contains('mza-zoom-badge')) continue;
+
+      if (el.shadowRoot) {
+        const shadowModal = findOpenModalInRoot(el.shadowRoot);
+        if (shadowModal) return shadowModal;
+      }
+
+      const style = window.getComputedStyle(el);
+      if (style.position === 'fixed' && isVisible(el)) {
+        const r = el.getBoundingClientRect();
+        const z = getNumericZIndex(el);
+        const isLargeOverlay = r.width >= vpW * 0.5 && r.height >= vpH * 0.5 && z >= 10;
+        const isCenteredDialogOverBackdrop = hasFixedBackdrop && z >= 10;
+        if (isLargeOverlay || isCenteredDialogOverBackdrop) {
+          const media = findLargestMedia(el, 100);
+          if (media) return { viewer: el, media };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function getFocusedMedia() {
+    const focused = document.activeElement;
+    if (!focused || focused === document.body || focused === document.documentElement) return null;
+    if (focused.tagName && focused.tagName.toLowerCase() === 'video' && isVisible(focused) && getVisibleClippedRect(focused)) {
+      return focused;
+    }
+    const playerContainer = focused.closest('.html5-video-player, #movie_player, [class*="player"]');
+    if (playerContainer) {
+      const vid = playerContainer.querySelector('video');
+      if (vid && isVisible(vid) && getVisibleClippedRect(vid)) return vid;
+    }
+    return null;
+  }
+
+  function getVisiblePrimaryPlayer() {
+    const players = document.querySelectorAll('#movie_player, .html5-video-player');
+    let bestVid = null;
+    let bestArea = 0;
+    for (const player of players) {
+      if (!isVisible(player)) continue;
+      const pRect = getVisibleClippedRect(player);
+      if (!pRect || pRect.width < 360 || pRect.height < 200) continue;
+      const vid = player.querySelector('video');
+      if (!vid || !isVisible(vid)) continue;
+      const vRect = getVisibleClippedRect(vid);
+      if (!vRect || vRect.area < pRect.area * 0.3) continue;
+      if (vRect.area > bestArea) {
+        bestArea = vRect.area;
+        bestVid = vid;
+      }
+    }
+    return bestVid;
+  }
+
+  function getActiveViewer(x, y) {
+    const openModal = getOpenModalViewer();
+    if (openModal) return openModal.viewer;
+
+    if (x !== undefined && y !== undefined) {
+      const elements = document.elementsFromPoint(x, y) || [];
+      for (const el of elements) {
+        if (el === document.body || el === document.documentElement) continue;
+        if (isInlineViewerElement(el) && isVisible(el) && findLargestMedia(el)) return el;
+        const parentViewer = el.closest(
+          '[role="dialog"], [aria-modal="true"], .pswp, .viewer-container, .fancybox__container, ' +
+          '[class*="lightbox"], [class*="viewer"], [class*="modal"], [class*="player"]'
+        );
+        if (parentViewer && isVisible(parentViewer) && findLargestMedia(parentViewer)) return parentViewer;
+      }
     }
 
     return null;
   }
 
   function isCursorNearElement(el, x, y, margin = 60) {
-    if (!el || !document.contains(el)) return false;
+    if (!el || !el.isConnected) return false;
     const rect = el.getBoundingClientRect();
     return (
       x >= rect.left - margin &&
@@ -273,8 +603,16 @@
     );
   }
 
+  function isPointInsidePlayerOf(el, x, y) {
+    if (!el || !el.isConnected) return false;
+    const player = el.closest('#movie_player, .html5-video-player, .video-container');
+    if (!player) return false;
+    const r = player.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
   function isEventOnActiveMedia(e) {
-    if (!activeElement || !document.contains(activeElement)) return false;
+    if (!activeElement || !activeElement.isConnected) return false;
     const path = e.composedPath ? e.composedPath() : [];
     if (path.includes(activeElement)) return true;
 
@@ -282,9 +620,9 @@
     for (const el of path) {
       if (!el || !(el instanceof Element)) continue;
       if (
-        el.contains(activeElement) &&
+        isDescendantOrSelf(activeElement, el) &&
         (el.id === 'movie_player' || el.classList.contains('html5-video-player') || el.classList.contains('video-container') ||
-         String(el.className || '').toLowerCase().includes('player'))
+         getElementClassString(el).toLowerCase().includes('player'))
       ) {
         return true;
       }
@@ -309,7 +647,7 @@
     for (const el of path) {
       if (!el || !(el instanceof Element)) continue;
       if (
-        el.contains(activeElement) &&
+        isDescendantOrSelf(activeElement, el) &&
         (el.id === 'movie_player' || el.classList.contains('html5-video-player') || el.classList.contains('video-container'))
       ) {
         return true;
@@ -359,165 +697,209 @@
     return false;
   }
 
-  // Priority search for media
-  function findTargetMedia(e) {
-    const x = e.clientX;
-    const y = e.clientY;
-
-    // 1. If currently zoomed in, keep active element if cursor is near it or within same viewer/window,
-    // unless user hovers directly over another distinct large content media (>= 150x150)
-    if (activeElement && activeState && activeState.scale > 1.0 && isVisible(activeElement)) {
-      if (isCursorNearElement(activeElement, x, y, 160)) {
-        return activeElement;
-      }
-      const elementsAtPoint = document.elementsFromPoint(x, y) || [];
-      let otherDistinctMedia = null;
-      for (const el of elementsAtPoint) {
-        if (el === activeElement || activeElement.contains(el)) continue;
-        if ((el.tagName === 'IMG' || el.tagName === 'VIDEO') && isVisible(el) && !isWatermarkOrOverlay(el)) {
-          const r = el.getBoundingClientRect();
-          if (r.width >= 150 && r.height >= 150) {
-            otherDistinctMedia = el;
-            break;
-          }
-        }
-      }
-      if (!otherDistinctMedia) {
-        return activeElement;
-      }
-    }
-
-    // 2. CHECK ACTIVE VIEWER / MODAL / PLAYER:
-    // If inside or interacting with an open lightbox/viewer/modal, ALWAYS prioritize the primary media in that viewer!
-    const activeViewer = getActiveViewer(x, y);
-    if (activeViewer) {
-      const viewerMedia = findLargestMedia(activeViewer);
-      if (viewerMedia) {
-        return resolveMediaNode(viewerMedia);
-      }
-    }
-
-    // 3. Check document.activeElement if focused (e.g. video player or focused media container)
-    if (document.activeElement && document.activeElement !== document.body && document.activeElement !== document.documentElement) {
-      const focused = document.activeElement;
-      if (focused.tagName && focused.tagName.toLowerCase() === 'video' && isVisible(focused)) {
-        return focused;
-      }
-      const playerContainer = focused.closest('.html5-video-player, #movie_player, [class*="player"]');
-      if (playerContainer) {
-        const vid = playerContainer.querySelector('video');
-        if (vid && isVisible(vid)) return vid;
-      }
-    }
-
+  function findDirectMediaAtPoint(x, y, e, options = {}) {
+    const { minSize = 0, exclude = null } = options;
     const elements = document.elementsFromPoint(x, y) || [];
-    const path = e.composedPath ? e.composedPath() : [];
+    const path = (e && e.composedPath) ? e.composedPath() : [];
 
-    // 4. VIDEO PRIORITY: Check direct <video> under cursor or in path
+    // Collect top visible layer elements before hitting an opaque non-media barrier
+    const topElements = [];
     for (const el of elements) {
-      if (el.tagName && el.tagName.toLowerCase() === 'video' && isVisible(el) && !isWatermarkOrOverlay(el)) {
+      topElements.push(el);
+      if (!isMediaNode(el) && !isWatermarkOrOverlay(el) && isOpaqueBackground(el)) {
+        break;
+      }
+    }
+
+    const isValidCandidate = (el, minW, minH) => {
+      if (!el || el === exclude) return false;
+      if (exclude && isDescendantOrSelf(el, exclude)) return false;
+      if (!isVisible(el) || isWatermarkOrOverlay(el) || isSpacerOrTransparentShield(el)) return false;
+      const clipped = getVisibleClippedRect(el);
+      if (!clipped) return false;
+      const reqW = Math.max(minW, minSize);
+      const reqH = Math.max(minH, minSize);
+      return clipped.width >= reqW && clipped.height >= reqH ? clipped : false;
+    };
+
+    // 1. VIDEO PRIORITY: direct <video> at point, in composedPath, in shadowRoot, or child of wrapper at point
+    for (const el of topElements) {
+      if (el.tagName && el.tagName.toLowerCase() === 'video' && isValidCandidate(el, 40, 40)) {
         return el;
       }
-    }
-
-    for (const el of path) {
-      if (el && el.tagName && el.tagName.toLowerCase() === 'video' && isVisible(el) && !isWatermarkOrOverlay(el)) {
-        return el;
-      }
-      if (el && el.shadowRoot) {
-        const vid = el.shadowRoot.querySelector('video');
-        if (vid && isVisible(vid) && !isWatermarkOrOverlay(vid)) return vid;
-      }
-    }
-
-    for (const el of elements) {
-      if (el === document.body || el === document.documentElement) continue;
-      const vid = el.querySelector('video');
-      if (vid && isVisible(vid) && !isWatermarkOrOverlay(vid) && isCursorNearElement(vid, x, y)) {
-        return vid;
-      }
-    }
-
-    // 5. IMAGE PRIORITY UNDER CURSOR:
-    // Collect all candidate images under cursor and pick the largest content image (filtering out watermarks & tiny icons)
-    let bestImgUnderCursor = null;
-    let bestImgArea = 0;
-
-    for (const el of elements) {
-      let candidate = null;
-      if (el.tagName && (el.tagName.toLowerCase() === 'img' || el.tagName.toLowerCase() === 'picture')) {
-        candidate = resolveMediaNode(el);
-      } else if (el !== document.body && el !== document.documentElement) {
-        const child = el.querySelector('img, picture');
-        if (child && isCursorNearElement(child, x, y, 20)) {
-          candidate = resolveMediaNode(child);
-        }
-      }
-      if (candidate && isVisible(candidate) && !isWatermarkOrOverlay(candidate)) {
-        const rect = candidate.getBoundingClientRect();
-        if (rect.width >= 50 && rect.height >= 50) {
-          const area = rect.width * rect.height;
-          if (area > bestImgArea) {
-            bestImgArea = area;
-            bestImgUnderCursor = candidate;
-          }
-        }
-      }
-    }
-    if (bestImgUnderCursor) {
-      return bestImgUnderCursor;
     }
 
     for (const el of path) {
       if (!el || !(el instanceof Element)) continue;
-      if (el.tagName && el.tagName.toLowerCase() === 'img' && isVisible(el) && !isWatermarkOrOverlay(el)) {
+      if (el.tagName && el.tagName.toLowerCase() === 'video' && isValidCandidate(el, 40, 40)) {
+        return el;
+      }
+      if (el.shadowRoot) {
+        const vid = el.shadowRoot.querySelector('video');
+        if (vid && isValidCandidate(vid, 40, 40)) return vid;
+      }
+    }
+
+    for (const el of topElements) {
+      if (el === document.body || el === document.documentElement) continue;
+      const vid = el.querySelector('video');
+      if (vid && isValidCandidate(vid, 40, 40) && isCursorNearElement(vid, x, y, 20)) {
+        return vid;
+      }
+    }
+
+    // 2. IMAGE PRIORITY AT POINT: direct <img> / <picture> in top visible layers
+    let bestImgUnderCursor = null;
+    let bestImgArea = 0;
+
+    for (const el of topElements) {
+      if (el.tagName && (el.tagName.toLowerCase() === 'img' || el.tagName.toLowerCase() === 'picture')) {
+        const candidate = resolveMediaNode(el);
+        const clipped = isValidCandidate(candidate, 50, 50);
+        if (clipped && clipped.area > bestImgArea) {
+          bestImgArea = clipped.area;
+          bestImgUnderCursor = candidate;
+        }
+      }
+    }
+    if (bestImgUnderCursor) return bestImgUnderCursor;
+
+    // Check composedPath / shadowRoot for images
+    for (const el of path) {
+      if (!el || !(el instanceof Element)) continue;
+      if (el.tagName && el.tagName.toLowerCase() === 'img' && isValidCandidate(el, 50, 50)) {
         return el;
       }
       if (el.shadowRoot) {
         const shadowImg = el.shadowRoot.querySelector('img');
-        if (shadowImg && isVisible(shadowImg) && !isWatermarkOrOverlay(shadowImg)) return shadowImg;
+        if (shadowImg && isValidCandidate(shadowImg, 50, 50)) return shadowImg;
       }
     }
 
-    // 6. Parent / sibling wrapper for video or img
-    for (const el of elements) {
+    // Check immediate child images under a wrapper overlay at point (strictly near cursor)
+    for (const el of topElements) {
+      if (el === document.body || el === document.documentElement) continue;
+      const children = el.querySelectorAll('img, picture');
+      for (const item of children) {
+        const candidate = resolveMediaNode(item);
+        if (!isCursorNearElement(candidate, x, y, 20)) continue;
+        const clipped = isValidCandidate(candidate, 50, 50);
+        if (clipped && clipped.area > bestImgArea) {
+          bestImgArea = clipped.area;
+          bestImgUnderCursor = candidate;
+        }
+      }
+      if (bestImgUnderCursor) return bestImgUnderCursor;
+    }
+
+    // 3. Sibling wrapper (only tightly under/next to cursor)
+    for (const el of topElements) {
       if (el === document.body || el === document.documentElement) continue;
       const parent = el.parentElement;
       if (parent && parent !== document.body && parent !== document.documentElement) {
         const vid = parent.querySelector('video');
-        if (vid && isVisible(vid) && !isWatermarkOrOverlay(vid) && isCursorNearElement(vid, x, y)) return vid;
+        if (vid && isValidCandidate(vid, 40, 40) && isCursorNearElement(vid, x, y, 30)) return vid;
 
         const siblingMedia = parent.querySelector('img');
-        if (siblingMedia && isVisible(siblingMedia) && !isWatermarkOrOverlay(siblingMedia) && isCursorNearElement(siblingMedia, x, y)) {
+        if (siblingMedia && isValidCandidate(siblingMedia, 50, 50) && isCursorNearElement(siblingMedia, x, y, 15)) {
           return siblingMedia;
         }
       }
     }
 
-    // 7. CANVAS PRIORITY (only if not a watermark and of substantial size >= 80x80)
-    for (const el of elements) {
-      if (el.tagName && el.tagName.toLowerCase() === 'canvas' && isVisible(el) && !isWatermarkOrOverlay(el)) {
-        const r = el.getBoundingClientRect();
-        if (r.width >= 80 && r.height >= 80) {
-          return el;
+    // 4. CANVAS PRIORITY (substantial size >= 80x80)
+    for (const el of topElements) {
+      if (el.tagName && el.tagName.toLowerCase() === 'canvas' && isValidCandidate(el, 80, 80)) {
+        return el;
+      }
+    }
+
+    // 5. Background image element
+    for (const el of topElements) {
+      if (hasBackgroundImage(el) && !isWatermarkOrOverlay(el) && el !== exclude) {
+        const clipped = getVisibleClippedRect(el);
+        const req = Math.max(80, minSize);
+        if (clipped && clipped.width >= req && clipped.height >= req) return el;
+      }
+    }
+
+    return null;
+  }
+
+  // Priority search for media
+  function findTargetMedia(e) {
+    const x = e.clientX;
+    const y = e.clientY;
+    const openModal = getOpenModalViewer();
+
+    // 1. If currently zoomed in, keep active element unless a modal opened over it or user explicitly points at another large media
+    if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected && isVisible(activeElement) && getVisibleClippedRect(activeElement)) {
+      if (openModal) {
+        return isDescendantOrSelf(activeElement, openModal.viewer) ? activeElement : openModal.media;
+      }
+
+      if (isCursorNearElement(activeElement, x, y, 160) || isPointInsidePlayerOf(activeElement, x, y)) {
+        return activeElement;
+      }
+
+      const otherDistinctMedia = findDirectMediaAtPoint(x, y, e, { minSize: 150, exclude: activeElement });
+      if (!otherDistinctMedia) {
+        return activeElement;
+      }
+    }
+
+    // 2. OPEN MODAL / LIGHTBOX / DIALOG / FULLSCREEN:
+    // Always prioritize the clearly open media in the active modal/viewer over anything behind or under the cursor!
+    if (openModal && openModal.media) {
+      return resolveMediaNode(openModal.media);
+    }
+
+    // 3. Direct media under cursor (video > img > canvas > background-image)
+    const directMedia = findDirectMediaAtPoint(x, y, e);
+    const primaryPlayer = getVisiblePrimaryPlayer();
+
+    if (directMedia) {
+      const isDirectVideo = directMedia.tagName && directMedia.tagName.toLowerCase() === 'video';
+      if (!isDirectVideo && primaryPlayer) {
+        const dRect = getVisibleClippedRect(directMedia);
+        const pRect = getVisibleClippedRect(primaryPlayer);
+        if (
+          dRect && pRect &&
+          pRect.width >= 420 && pRect.height >= 240 &&
+          (dRect.width < 220 || dRect.height < 160) &&
+          pRect.area >= dRect.area * 4
+        ) {
+          return primaryPlayer;
         }
       }
+      return directMedia;
     }
 
-    // 8. Background image element
-    for (const el of elements) {
-      if (hasBackgroundImage(el) && !isWatermarkOrOverlay(el)) {
-        const r = el.getBoundingClientRect();
-        if (r.width >= 80 && r.height >= 80) return el;
+    // 4. Inline viewer / player container directly under cursor (e.g. cursor on viewer margin/controls)
+    const inlineViewer = getActiveViewer(x, y);
+    if (inlineViewer) {
+      const viewerMedia = findLargestMedia(inlineViewer);
+      if (viewerMedia) {
+        return resolveMediaNode(viewerMedia);
       }
     }
 
-    // 9. Document-wide fallback: largest visible media on page
+    // 5. Focused video player / media element (document.activeElement)
+    const focusedMedia = getFocusedMedia();
+    if (focusedMedia) {
+      return focusedMedia;
+    }
+
+    // 6. Visible primary video player (e.g. #movie_player when cursor is outside media)
+    if (primaryPlayer) {
+      return primaryPlayer;
+    }
+
+    // 7. Document-wide fallback: largest visible media on page
     const largest = findLargestMedia(document);
     if (largest) {
-      const rect = largest.getBoundingClientRect();
-      const area = rect.width * rect.height;
-      if (area >= (window.innerWidth * window.innerHeight * 0.08)) {
+      const clipped = getVisibleClippedRect(largest);
+      if (clipped && clipped.area >= (window.innerWidth * window.innerHeight * 0.08)) {
         return resolveMediaNode(largest);
       }
     }
@@ -651,7 +1033,7 @@
     if (!isModifierPressed(e)) {
       if (activeElement && activeState && activeState.scale > 1.0) {
         // Auto-reset if media was detached or hidden (e.g. modal closed)
-        if (!document.contains(activeElement) || !isVisible(activeElement)) {
+        if (!activeElement.isConnected || !isVisible(activeElement)) {
           resetZoom(activeElement);
           return;
         }
@@ -726,7 +1108,7 @@
       };
 
       const isVideo = targetMedia.tagName && targetMedia.tagName.toLowerCase() === 'video';
-      const inModal = Boolean(targetMedia.closest('[role="dialog"], [aria-modal="true"], .modal, .lightbox, .pswp, .viewer, [class*="viewer"], [class*="lightbox"], [class*="modal"]'));
+      const inModal = Boolean(targetMedia.closest('[role="dialog"], [aria-modal="true"], dialog[open], .modal, .lightbox, .pswp, .viewer, [class*="viewer"], [class*="lightbox"], [class*="modal"]'));
       const computed = window.getComputedStyle(targetMedia);
       if (computed.position === 'static') {
         targetMedia.style.position = 'relative';
@@ -899,8 +1281,8 @@
       }
 
       const clickedEl = e.target;
-      if (clickedEl !== activeElement && !activeElement.contains(clickedEl)) {
-        const cls = String(clickedEl.className || '').toLowerCase();
+      if (clickedEl !== activeElement && !isDescendantOrSelf(clickedEl, activeElement)) {
+        const cls = getElementClassString(clickedEl).toLowerCase();
         if (
           cls.includes('swiper-button') || cls.includes('slick-arrow') ||
           cls.includes('pswp__button--arrow') || cls.includes('gallery-next') ||
@@ -915,7 +1297,7 @@
       const prevEl = activeElement;
       [60, 250, 450].forEach((delay) => {
         setTimeout(() => {
-          if (activeElement === prevEl && (!document.contains(prevEl) || !isVisible(prevEl))) {
+          if (activeElement === prevEl && (!prevEl.isConnected || !isVisible(prevEl))) {
             resetZoom(prevEl);
           }
         }, delay);
@@ -974,12 +1356,25 @@
       const isZoomOut = !isZoomIn && matchesKeyCombo(e, config.kbdZoomOut);
 
       if (isZoomIn || isZoomOut) {
-        let target = (activeElement && isVisible(activeElement)) ? activeElement : null;
-        if (!target) {
-          const viewer = getActiveViewer(lastMouseX >= 0 ? lastMouseX : undefined, lastMouseY >= 0 ? lastMouseY : undefined);
-          if (viewer) {
-            target = findLargestMedia(viewer);
+        const openModal = getOpenModalViewer();
+        let target = null;
+
+        if (activeElement && activeElement.isConnected && isVisible(activeElement) && getVisibleClippedRect(activeElement)) {
+          if (!openModal || isDescendantOrSelf(activeElement, openModal.viewer)) {
+            target = activeElement;
+          } else {
+            resetZoom(activeElement);
           }
+        }
+
+        if (!target && openModal && openModal.media) {
+          target = resolveMediaNode(openModal.media);
+        }
+        if (!target) {
+          target = getFocusedMedia();
+        }
+        if (!target) {
+          target = getVisiblePrimaryPlayer();
         }
         if (!target && lastMouseX >= 0 && lastMouseY >= 0) {
           target = findTargetMedia({ clientX: lastMouseX, clientY: lastMouseY });
@@ -1024,7 +1419,7 @@
     document.documentElement.classList.remove('mza-dragging-active');
     if (activeElement) {
       activeElement.classList.remove('mza-dragging');
-      if (!document.contains(activeElement) || !isVisible(activeElement)) {
+      if (!activeElement.isConnected || !isVisible(activeElement)) {
         resetZoom(activeElement);
       }
     }
