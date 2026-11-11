@@ -3,20 +3,20 @@
   const config = {
     enabled: true,
     modifierKey: 'ctrl',
-    zoomSpeed: 1.15,
-    maxZoom: 20.0,
+    zoomSpeed: 1.35,
+    maxZoom: 15.0,
     minZoom: 1.0,
     wheelPanSpeed: 1.0,
     badgeTimeout: 1200,
     hideScrollbars: true,
-    keyboardZoomEnabled: false,
+    keyboardZoomEnabled: true,
     kbdZoomIn: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowUp', key: 'ArrowUp' },
     kbdZoomOut: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowDown', key: 'ArrowDown' },
     kbdPanUp: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowLeft', key: 'ArrowLeft' },
     kbdPanDown: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowRight', key: 'ArrowRight' },
-    keyboardPanEnabled: false,
-    keyboardPanModifier: 'none',
-    keyboardPanStep: 135
+    keyboardPanEnabled: true,
+    keyboardPanModifier: 'shift',
+    keyboardPanStep: 200
   };
 
   // Check support for individual transform properties (Chrome 104+)
@@ -1453,7 +1453,7 @@
     }
     blockKeyEvent(e);
     if (e.code) blockedKeyCodes.add(e.code);
-    const baseStep = Number(config.keyboardPanStep) || 135;
+    const baseStep = Number(config.keyboardPanStep) || 200;
     const step = Math.max(10, Math.round(baseStep * config.wheelPanSpeed)) * speedBoost;
     activeState.panX += dx * step;
     activeState.panY += dy * step;

@@ -161,18 +161,18 @@ document.addEventListener('DOMContentLoaded', () => {
   chrome.storage.sync.get({
     enabled: true,
     modifierKey: 'ctrl',
-    zoomSpeed: 1.15,
+    zoomSpeed: 1.35,
     maxZoom: 15,
     language: defaultLang,
     hideScrollbars: true,
-    keyboardZoomEnabled: false,
+    keyboardZoomEnabled: true,
     kbdZoomIn: defaultKbdIn,
     kbdZoomOut: defaultKbdOut,
     kbdPanUp: defaultKbdPanUp,
     kbdPanDown: defaultKbdPanDown,
-    keyboardPanEnabled: false,
-    keyboardPanModifier: 'none',
-    keyboardPanStep: 135
+    keyboardPanEnabled: true,
+    keyboardPanModifier: 'shift',
+    keyboardPanStep: 200
   }, (items) => {
     toggleEnabled.checked = items.enabled;
     modifierKey.value = items.modifierKey;
@@ -180,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
     zoomSpeedVal.textContent = `${Math.round((items.zoomSpeed - 1) * 100)}%`;
     maxZoom.value = items.maxZoom;
     maxZoomVal.textContent = `${items.maxZoom}x`;
-    const panStep = Number(items.keyboardPanStep) || 135;
+    const panStep = Number(items.keyboardPanStep) || 200;
     keyboardPanStep.value = panStep;
     keyboardPanStepVal.textContent = `${panStep}px`;
     toggleHideScrollbars.checked = items.hideScrollbars;
@@ -192,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindings.down.combo = items.kbdPanDown || defaultKbdPanDown;
     toggleKeyboardPan.checked = items.keyboardPanEnabled;
     kbdPanOptions.style.display = items.keyboardPanEnabled ? 'block' : 'none';
-    kbdPanModifier.value = items.keyboardPanModifier || 'none';
+    kbdPanModifier.value = items.keyboardPanModifier || 'shift';
     updateBindingButtons();
     applyLanguage(items.language);
   });

@@ -38,9 +38,9 @@
     <div class="setting-row">
       <div class="label-with-value">
         <label for="zoomSpeed" data-i18n="zoomSpeedLabel">Zoom speed:</label>
-        <span id="zoomSpeedVal">15%</span>
+        <span id="zoomSpeedVal">35%</span>
       </div>
-      <input type="range" id="zoomSpeed" min="1.05" max="1.35" step="0.01" value="1.15">
+      <input type="range" id="zoomSpeed" min="1.05" max="2.00" step="0.01" value="1.35">
     </div>
 
     <div class="setting-row">
@@ -54,9 +54,9 @@
     <div class="setting-row">
       <div class="label-with-value">
         <label for="keyboardPanStep" data-i18n="kbdPanStepLabel">Pan step:</label>
-        <span id="keyboardPanStepVal">135px</span>
+        <span id="keyboardPanStepVal">200px</span>
       </div>
-      <input type="range" id="keyboardPanStep" min="20" max="400" step="5" value="135">
+      <input type="range" id="keyboardPanStep" min="20" max="400" step="5" value="200">
     </div>
 
     <div class="setting-row kbd-section">
@@ -73,11 +73,11 @@
       <div class="kbd-header">
         <label for="toggleKeyboardZoom" data-i18n="kbdZoomLabel">Keyboard zoom (center):</label>
         <label class="switch switch-sm">
-          <input type="checkbox" id="toggleKeyboardZoom">
+          <input type="checkbox" id="toggleKeyboardZoom" checked>
           <span class="slider"></span>
         </label>
       </div>
-      <div class="kbd-bindings" id="kbdBindings" style="display: none;">
+      <div class="kbd-bindings" id="kbdBindings" style="display: grid;">
         <div class="kbd-field">
           <span data-i18n="kbdInLabel">Zoom In</span>
           <button type="button" id="bindZoomIn" class="kbd-btn">Ctrl + ↑</button>
@@ -101,14 +101,14 @@
       <div class="kbd-header">
         <label for="toggleKeyboardPan" data-i18n="kbdPanLabel">Pan with arrow keys:</label>
         <label class="switch switch-sm">
-          <input type="checkbox" id="toggleKeyboardPan">
+          <input type="checkbox" id="toggleKeyboardPan" checked>
           <span class="slider"></span>
         </label>
       </div>
-      <div class="kbd-pan-options" id="kbdPanOptions" style="display: none;">
+      <div class="kbd-pan-options" id="kbdPanOptions" style="display: block;">
         <select id="kbdPanModifier">
           <option value="none" data-i18n="optPanNone">↑ ↓ ← → (Arrows only)</option>
-          <option value="shift" data-i18n="optPanShift">Shift + ↑ ↓ ← →</option>
+          <option value="shift" data-i18n="optPanShift" selected>Shift + ↑ ↓ ← →</option>
           <option value="alt" data-i18n="optPanAlt">Alt + ↑ ↓ ← →</option>
           <option value="ctrl" data-i18n="optPanCtrl">Ctrl / Cmd + ↑ ↓ ← →</option>
         </select>
