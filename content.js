@@ -15,7 +15,8 @@
     kbdPanUp: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowLeft', key: 'ArrowLeft' },
     kbdPanDown: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowRight', key: 'ArrowRight' },
     keyboardPanEnabled: false,
-    keyboardPanModifier: 'none'
+    keyboardPanModifier: 'none',
+    keyboardPanStep: 135
   };
 
   // Check support for individual transform properties (Chrome 104+)
@@ -34,7 +35,7 @@
     chrome.storage.sync.get([
       'enabled', 'modifierKey', 'zoomSpeed', 'maxZoom',
       'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut',
-      'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier'
+      'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier', 'keyboardPanStep'
     ], (items) => {
       if (items.enabled !== undefined) config.enabled = items.enabled;
       if (items.modifierKey) config.modifierKey = items.modifierKey;
@@ -48,6 +49,7 @@
       if (items.kbdPanDown) config.kbdPanDown = items.kbdPanDown;
       if (items.keyboardPanEnabled !== undefined) config.keyboardPanEnabled = items.keyboardPanEnabled;
       if (items.keyboardPanModifier) config.keyboardPanModifier = items.keyboardPanModifier;
+      if (items.keyboardPanStep !== undefined) config.keyboardPanStep = Number(items.keyboardPanStep);
     });
 
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -67,6 +69,7 @@
         if (changes.kbdPanDown) config.kbdPanDown = changes.kbdPanDown.newValue;
         if (changes.keyboardPanEnabled) config.keyboardPanEnabled = changes.keyboardPanEnabled.newValue;
         if (changes.keyboardPanModifier) config.keyboardPanModifier = changes.keyboardPanModifier.newValue;
+        if (changes.keyboardPanStep) config.keyboardPanStep = Number(changes.keyboardPanStep.newValue);
       }
     });
   }
@@ -1450,7 +1453,8 @@
     }
     blockKeyEvent(e);
     if (e.code) blockedKeyCodes.add(e.code);
-    const step = Math.max(30, Math.round(45 * config.wheelPanSpeed)) * speedBoost;
+    const baseStep = Number(config.keyboardPanStep) || 135;
+    const step = Math.max(10, Math.round(baseStep * config.wheelPanSpeed)) * speedBoost;
     activeState.panX += dx * step;
     activeState.panY += dy * step;
     applyTransform(activeElement, activeState.scale, activeState.panX, activeState.panY);

@@ -6,6 +6,7 @@ const translations = {
     optShift: 'Shift',
     zoomSpeedLabel: 'Zoom speed:',
     maxZoomLabel: 'Max zoom:',
+    kbdPanStepLabel: 'Pan step:',
     hideScrollbarsLabel: 'Hide scrollbars when zoomed:',
     kbdZoomLabel: 'Keyboard zoom (center):',
     kbdInLabel: 'Zoom In',
@@ -34,6 +35,7 @@ const translations = {
     optShift: 'Shift',
     zoomSpeedLabel: 'Швидкість зуму:',
     maxZoomLabel: 'Максимальний зум:',
+    kbdPanStepLabel: 'Крок переміщення:',
     hideScrollbarsLabel: 'Приховувати скрол при зумі:',
     kbdZoomLabel: 'Зум з клавіатури (у центр):',
     kbdInLabel: 'Наблизити',
@@ -93,6 +95,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const zoomSpeedVal = document.getElementById('zoomSpeedVal');
   const maxZoom = document.getElementById('maxZoom');
   const maxZoomVal = document.getElementById('maxZoomVal');
+  const keyboardPanStep = document.getElementById('keyboardPanStep');
+  const keyboardPanStepVal = document.getElementById('keyboardPanStepVal');
   const toggleHideScrollbars = document.getElementById('toggleHideScrollbars');
   const toggleKeyboardZoom = document.getElementById('toggleKeyboardZoom');
   const kbdBindings = document.getElementById('kbdBindings');
@@ -167,7 +171,8 @@ document.addEventListener('DOMContentLoaded', () => {
     kbdPanUp: defaultKbdPanUp,
     kbdPanDown: defaultKbdPanDown,
     keyboardPanEnabled: false,
-    keyboardPanModifier: 'none'
+    keyboardPanModifier: 'none',
+    keyboardPanStep: 135
   }, (items) => {
     toggleEnabled.checked = items.enabled;
     modifierKey.value = items.modifierKey;
@@ -175,6 +180,9 @@ document.addEventListener('DOMContentLoaded', () => {
     zoomSpeedVal.textContent = `${Math.round((items.zoomSpeed - 1) * 100)}%`;
     maxZoom.value = items.maxZoom;
     maxZoomVal.textContent = `${items.maxZoom}x`;
+    const panStep = Number(items.keyboardPanStep) || 135;
+    keyboardPanStep.value = panStep;
+    keyboardPanStepVal.textContent = `${panStep}px`;
     toggleHideScrollbars.checked = items.hideScrollbars;
     toggleKeyboardZoom.checked = items.keyboardZoomEnabled;
     kbdBindings.style.display = items.keyboardZoomEnabled ? 'grid' : 'none';
@@ -213,6 +221,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const val = Number(maxZoom.value);
     maxZoomVal.textContent = `${val}x`;
     chrome.storage.sync.set({ maxZoom: val });
+  });
+
+  keyboardPanStep.addEventListener('input', () => {
+    const val = Number(keyboardPanStep.value);
+    keyboardPanStepVal.textContent = `${val}px`;
+    chrome.storage.sync.set({ keyboardPanStep: val });
   });
 
   toggleHideScrollbars.addEventListener('change', () => {

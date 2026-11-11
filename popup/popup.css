@@ -140,7 +140,7 @@ input[type="range"] {
   cursor: pointer;
 }
 
-#zoomSpeedVal, #maxZoomVal {
+#zoomSpeedVal, #maxZoomVal, #keyboardPanStepVal {
   color: #38bdf8;
   font-weight: 600;
 }
