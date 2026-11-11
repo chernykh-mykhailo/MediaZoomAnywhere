@@ -68,6 +68,7 @@
   let startPanX = 0;
   let startPanY = 0;
   let hasDragged = false;
+  let pointerDownInPlayer = false;
   let lastMouseX = -1;
   let lastMouseY = -1;
 
@@ -611,21 +612,82 @@
     return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
   }
 
+  function isActiveVideo() {
+    return Boolean(activeElement && activeElement.tagName && activeElement.tagName.toLowerCase() === 'video');
+  }
+
+  function isPointInRect(rect, x, y, pad = 0) {
+    if (!rect) return false;
+    return x >= rect.left - pad && x <= rect.right + pad && y >= rect.top - pad && y <= rect.bottom + pad;
+  }
+
+  function isInsideActiveVideoFrame(e) {
+    if (!isActiveVideo() || !activeState) return false;
+    if (isPointInRect(activeState.origRect, e.clientX, e.clientY, 8)) return true;
+    return isPointInRect(activeElement.getBoundingClientRect(), e.clientX, e.clientY, 8);
+  }
+
+  function isNativeVideoControlsClick(e) {
+    if (!isActiveVideo() || !activeElement.hasAttribute('controls')) return false;
+    const liveRect = activeElement.getBoundingClientRect();
+    const origRect = activeState && activeState.origRect;
+    const inLiveBar = isPointInRect(liveRect, e.clientX, e.clientY) && e.clientY >= liveRect.bottom - 65;
+    const inOrigBar = origRect && isPointInRect(origRect, e.clientX, e.clientY) && e.clientY >= origRect.bottom - 65;
+    return Boolean(inLiveBar || inOrigBar);
+  }
+
+  function isVideoPlayerContainer(el, mediaEl) {
+    if (!el || !(el instanceof Element) || el === document.body || el === document.documentElement) return false;
+    if (!isDescendantOrSelf(mediaEl, el)) return false;
+
+    const cls = getElementClassString(el).toLowerCase();
+    if (
+      el.id === 'movie_player' ||
+      cls.includes('player') ||
+      cls.includes('video-container') ||
+      cls.includes('video-wrap') ||
+      cls.includes('video-box') ||
+      el.classList.contains('html5-video-player') ||
+      el.classList.contains('plyr') ||
+      el.classList.contains('video-js') ||
+      el.classList.contains('shaka-video-container') ||
+      el.classList.contains('mejs__container') ||
+      el.classList.contains('artplayer-app') ||
+      el.classList.contains('dplayer')
+    ) {
+      return true;
+    }
+
+    const testId = (el.getAttribute('data-testid') || '').toLowerCase();
+    if (testId.includes('video')) return true;
+
+    // Tight wrapper around <video> (catches obfuscated React/Tailwind players like X/Twitter or Telegram)
+    if (mediaEl.tagName && mediaEl.tagName.toLowerCase() === 'video' && activeState && activeState.origRect) {
+      const r = el.getBoundingClientRect();
+      const orig = activeState.origRect;
+      if (r.width > 0 && r.height > 0 && r.width <= orig.width + 80 && r.height <= orig.height + 140) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   function isEventOnActiveMedia(e) {
     if (!activeElement || !activeElement.isConnected) return false;
     const path = e.composedPath ? e.composedPath() : [];
     if (path.includes(activeElement)) return true;
 
-    // Check if event target is inside player container of activeElement (e.g. #movie_player / .video-container)
+    // Check if event target is inside player container of activeElement
     for (const el of path) {
-      if (!el || !(el instanceof Element)) continue;
-      if (
-        isDescendantOrSelf(activeElement, el) &&
-        (el.id === 'movie_player' || el.classList.contains('html5-video-player') || el.classList.contains('video-container') ||
-         getElementClassString(el).toLowerCase().includes('player'))
-      ) {
+      if (isVideoPlayerContainer(el, activeElement)) {
         return true;
       }
+    }
+
+    // For zoomed videos, clicks inside the original player frame (e.g. sibling/portal seekbars) stay in the player
+    if (isInsideActiveVideoFrame(e)) {
+      return true;
     }
 
     // Check if target is a direct overlay/watermark sitting on top of activeElement
@@ -645,17 +707,12 @@
     if (path.includes(activeElement)) return true;
 
     for (const el of path) {
-      if (!el || !(el instanceof Element)) continue;
-      if (
-        isDescendantOrSelf(activeElement, el) &&
-        (el.id === 'movie_player' || el.classList.contains('html5-video-player') || el.classList.contains('video-container'))
-      ) {
+      if (isVideoPlayerContainer(el, activeElement)) {
         return true;
       }
     }
 
-    const rect = activeElement.getBoundingClientRect();
-    if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+    if (isPointInRect(activeElement.getBoundingClientRect(), e.clientX, e.clientY)) {
       return true;
     }
 
@@ -667,16 +724,19 @@
     if (!target || !(target instanceof Element)) return false;
     const tag = (target.tagName || '').toLowerCase();
     if (tag === 'button' || tag === 'input' || tag === 'select' || tag === 'a') return true;
-    if (target.getAttribute && (target.getAttribute('role') === 'button' || target.getAttribute('role') === 'slider')) return true;
+    const role = target.getAttribute ? target.getAttribute('role') : null;
+    if (role === 'button' || role === 'slider' || role === 'menuitem' || role === 'menuitemradio' || role === 'menuitemcheckbox') {
+      return true;
+    }
 
-    if (target.closest('button, a, input, select, [role="button"], [role="slider"]')) {
+    if (target.closest('button, a, input, select, [role="button"], [role="slider"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], .ytp-popup, .ytp-panel, .vjs-menu, .plyr__menu')) {
       return true;
     }
 
     // Compact player control bars (height <= 110px) so we never match a full-player overlay wrapper
     const controlBar = target.closest(
       '.ytp-chrome-bottom, .ytp-chrome-top, .vjs-control-bar, .plyr__controls, ' +
-      '[class*="control"], [class*="progress"], [class*="timeline"], [class*="seek"], [class*="volume"], [class*="toolbar"]'
+      '[class*="control"], [class*="progress"], [class*="timeline"], [class*="seek"], [class*="scrubber"], [class*="slider"], [class*="volume"], [class*="toolbar"]'
     );
     if (controlBar) {
       const barRect = controlBar.getBoundingClientRect();
@@ -978,6 +1038,7 @@
     activeElement = null;
     activeState = null;
     isDragging = false;
+    pointerDownInPlayer = false;
   }
 
   function applyTransform(el, scale, panX, panY) {
@@ -1183,27 +1244,34 @@
     showBadge(`${Math.round(nextScale * 100)}%`, badgeX, badgeY);
   }
 
+  function isResetNavigationControl(el) {
+    if (!el || !(el instanceof Element)) return false;
+    const btn = el.closest ? (el.closest('button, a, [role="button"]') || el) : el;
+    const cls = getElementClassString(btn).toLowerCase();
+    return (
+      cls.includes('swiper-button') || cls.includes('slick-arrow') ||
+      cls.includes('pswp__button--arrow') || cls.includes('gallery-next') ||
+      cls.includes('gallery-prev') || cls.includes('close')
+    );
+  }
+
   // Pointer & Mouse Down handling
   function onPointerDown(e) {
     if (!activeElement || !activeState || activeState.scale <= 1.0) return;
     if (e.button !== 0 && e.button !== 1) return;
 
-    // Allow user to click real controls (close button, arrows, player bars) without dragging or shifting layout before click completes
-    if (isControlElement(e.target)) {
-      return;
+    const onPlayer = isEventOnActiveMedia(e);
+    if (e.type === 'pointerdown' || !pointerDownInPlayer) {
+      pointerDownInPlayer = isActiveVideo() && (onPlayer || isNativeVideoControlsClick(e));
     }
-    if (
-      activeElement.tagName &&
-      activeElement.tagName.toLowerCase() === 'video' &&
-      activeElement.hasAttribute('controls') &&
-      activeState.origRect &&
-      e.clientY >= activeState.origRect.bottom - 55
-    ) {
+
+    // Allow user to click real controls (close button, arrows, player bars) without dragging or shifting layout before click completes
+    if (isControlElement(e.target) || isNativeVideoControlsClick(e)) {
       return;
     }
 
     // Only capture drag if clicking inside active media area; outside clicks pass cleanly to onClick
-    if (!isEventOnActiveMedia(e)) {
+    if (!onPlayer) {
       return;
     }
 
@@ -1265,6 +1333,9 @@
 
   // Prevent accidental clicks after drag, and reset zoom on outside clicks or modal close
   function onClick(e) {
+    const startedInPlayer = pointerDownInPlayer;
+    pointerDownInPlayer = false;
+
     if (hasDragged) {
       hasDragged = false;
       e.preventDefault();
@@ -1274,23 +1345,17 @@
     }
 
     if (activeElement && activeState && activeState.scale > 1.0) {
-      // If user clicked outside the zoomed media/player, reset zoom cleanly AFTER the click fires on the target!
-      if (!isEventOnActiveMedia(e)) {
+      const clickedEl = e.target;
+      if (clickedEl !== activeElement && !isDescendantOrSelf(clickedEl, activeElement) && isResetNavigationControl(clickedEl)) {
         resetZoom(activeElement);
         return;
       }
 
-      const clickedEl = e.target;
-      if (clickedEl !== activeElement && !isDescendantOrSelf(clickedEl, activeElement)) {
-        const cls = getElementClassString(clickedEl).toLowerCase();
-        if (
-          cls.includes('swiper-button') || cls.includes('slick-arrow') ||
-          cls.includes('pswp__button--arrow') || cls.includes('gallery-next') ||
-          cls.includes('gallery-prev') || cls.includes('close')
-        ) {
-          resetZoom(activeElement);
-          return;
-        }
+      // Keep zoom when clicking/scrubbing inside a video player (seekbar, timeline, play/pause, controls)
+      const onPlayer = isEventOnActiveMedia(e) || (isActiveVideo() && (startedInPlayer || isNativeVideoControlsClick(e)));
+      if (!onPlayer) {
+        resetZoom(activeElement);
+        return;
       }
 
       // Check after click in case the click closed a lightbox/modal (including animated fade-outs)
@@ -1307,7 +1372,7 @@
 
   function onDoubleClick(e) {
     if (!activeElement || !activeState || activeState.scale <= 1.0) return;
-    if (isControlElement(e.target)) return;
+    if (isControlElement(e.target) || isNativeVideoControlsClick(e)) return;
     e.preventDefault();
     e.stopPropagation();
     resetZoom(activeElement);
@@ -1415,6 +1480,7 @@
   function onWindowBlur() {
     isDragging = false;
     hasDragged = false;
+    pointerDownInPlayer = false;
     blockedKeyCodes.clear();
     document.documentElement.classList.remove('mza-dragging-active');
     if (activeElement) {
