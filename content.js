@@ -97,10 +97,18 @@
   let badgeTimer = null;
 
   function getOrCreateBadge() {
-    if (!badgeEl || !document.documentElement.contains(badgeEl)) {
+    const fs = document.fullscreenElement || document.webkitFullscreenElement;
+    const targetParent = (fs && fs instanceof Element && fs.tagName.toLowerCase() !== 'video')
+      ? fs
+      : document.documentElement;
+
+    if (!badgeEl || badgeEl.parentElement !== targetParent) {
+      if (badgeEl && badgeEl.parentElement) {
+        badgeEl.parentElement.removeChild(badgeEl);
+      }
       badgeEl = document.createElement('div');
       badgeEl.className = 'mza-zoom-badge';
-      document.documentElement.appendChild(badgeEl);
+      targetParent.appendChild(badgeEl);
     }
     return badgeEl;
   }
@@ -185,6 +193,9 @@
     const rect = el.getBoundingClientRect();
     if (rect.width < 10 || rect.height < 10) return null;
 
+    const fs = document.fullscreenElement || document.webkitFullscreenElement;
+    const inFullscreen = Boolean(fs && (fs === el || isDescendantOrSelf(el, fs)));
+
     const vpW = window.innerWidth;
     const vpH = window.innerHeight;
     let left = Math.max(rect.left, 0);
@@ -194,11 +205,21 @@
 
     if (right <= left || bottom <= top) return null;
 
+    // Fullscreen element is in Top Layer; nothing above it clips it
+    if (inFullscreen && el === fs) {
+      const width = right - left;
+      const height = bottom - top;
+      return { left, top, right, bottom, width, height, area: width * height };
+    }
+
+    const effectiveStopAt = stopAtAncestor || (inFullscreen ? fs : null);
+
     const elStyle = window.getComputedStyle(el);
     if (elStyle.position !== 'fixed') {
       let childIsAbsolute = elStyle.position === 'absolute';
       let p = getParentAcrossShadow(el);
       while (p && p !== document.documentElement) {
+        if (p === effectiveStopAt || (inFullscreen && p === fs)) break;
         const pStyle = window.getComputedStyle(p);
         const isPositioned = pStyle.position !== 'static' || pStyle.transform !== 'none' || pStyle.filter !== 'none' || pStyle.contain === 'paint';
         const clipX = pStyle.overflowX === 'hidden' || pStyle.overflowX === 'clip' || pStyle.overflowX === 'scroll' || pStyle.overflowX === 'auto';
@@ -222,7 +243,7 @@
           }
         }
 
-        if (p === stopAtAncestor || pStyle.position === 'fixed') break;
+        if (p === effectiveStopAt || (inFullscreen && p === fs) || pStyle.position === 'fixed') break;
         p = getParentAcrossShadow(p);
       }
     }
@@ -332,7 +353,7 @@
     if (container instanceof Element && isMediaNode(container)) {
       const resolved = resolveMediaNode(container);
       if (isVisible(resolved) && !isWatermarkOrOverlay(resolved) && !isSpacerOrTransparentShield(resolved)) {
-        if (getVisibleClippedRect(resolved, null)) return resolved;
+        if (getVisibleClippedRect(resolved, stopAt)) return resolved;
       }
     }
 
@@ -1075,6 +1096,11 @@
     if (!el || !el.isConnected || !isVisible(el)) return true;
     if (el.closest && el.closest('[aria-hidden="true"], [inert]')) return true;
 
+    const fs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fs && (fs === el || isDescendantOrSelf(el, fs))) {
+      return false;
+    }
+
     const clipped = getVisibleClippedRect(el);
     if (!clipped) return true;
 
@@ -1615,6 +1641,12 @@
     }
   }
 
+  function onFullscreenChange() {
+    if (activeElement && activeState) {
+      resetZoom(activeElement);
+    }
+  }
+
   // Clear stuck drag states on Alt+Tab or window blur
   function onWindowBlur() {
     isDragging = false;
@@ -1654,4 +1686,6 @@
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) onWindowBlur();
   });
+  document.addEventListener('fullscreenchange', onFullscreenChange, { capture: true });
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange, { capture: true });
 })();
