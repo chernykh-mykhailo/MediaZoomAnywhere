@@ -1233,37 +1233,87 @@
   // Dedicated YouTube feed media finder:
   // When a card is hovered and its preview (HTML5 video or moving WebP animated thumbnail) is active,
   // this GUARANTEES we target that active preview element instead of the static background thumbnail!
+  // Note: Modern YouTube encapsulates the inline preview player inside <ytd-video-preview>'s Shadow DOM,
+  // so we must pierce the shadowRoot to find the actual <video>!
   function findYouTubeHoverMedia(x, y) {
     if (!window.location.hostname.includes('youtube.com')) return null;
 
-    // 1. Check all videos across the page: if any video is active/playing under cursor or its card, target it!
-    const allVideos = document.querySelectorAll('video');
-    for (const vid of allVideos) {
+    // 1. Collect all potential candidate containers and elements under the cursor
+    const candidateContainers = document.querySelectorAll(
+      'ytd-video-preview, #video-preview, [id*="preview"], ytd-player, ytd-thumbnail, ytd-rich-item-renderer'
+    );
+    const elementsAtPoint = document.elementsFromPoint(x, y) || [];
+    const allHosts = new Set([...candidateContainers, ...elementsAtPoint]);
+
+    const foundVideos = new Set();
+
+    // Helper to recursively pierce shadow roots and collect all <video> elements
+    const extractVideos = (node, depth = 0) => {
+      if (!node || depth > 4) return;
+      if (node.tagName && node.tagName.toLowerCase() === 'video') {
+        foundVideos.add(node);
+        return;
+      }
+      if (node.querySelectorAll) {
+        node.querySelectorAll('video').forEach(v => foundVideos.add(v));
+      }
+      if (node.shadowRoot) {
+        if (node.shadowRoot.querySelectorAll) {
+          node.shadowRoot.querySelectorAll('video').forEach(v => foundVideos.add(v));
+          node.shadowRoot.querySelectorAll('*').forEach(child => {
+            if (child.shadowRoot) {
+              extractVideos(child, depth + 1);
+            }
+          });
+        }
+      }
+    };
+
+    // Also collect document-level videos
+    document.querySelectorAll('video').forEach(v => foundVideos.add(v));
+
+    for (const host of allHosts) {
+      extractVideos(host);
+    }
+
+    // Evaluate all discovered videos to find the one actively playing under the cursor
+    let bestVideo = null;
+    let bestScore = -1;
+
+    for (const vid of foundVideos) {
       if (!vid || !vid.isConnected) continue;
       const vStyle = window.getComputedStyle(vid);
       if (vStyle.display === 'none' || vStyle.visibility === 'hidden' || parseFloat(vStyle.opacity) < 0.05) continue;
 
       const vr = vid.getBoundingClientRect();
-      const container = vid.closest(
+      const host = (vid.getRootNode && vid.getRootNode().host) || vid.closest(
         '#inline-preview-player, ytd-video-preview, #video-preview, .html5-video-player, ytd-moving-thumbnail-renderer, ' +
-        'ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ' +
-        '[class*="player"], [class*="preview"]'
+        'ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer'
       ) || vid;
-      const cr = container.getBoundingClientRect();
+      const hr = host.getBoundingClientRect();
 
       const inBounds = (vr.width >= 30 && vr.height >= 30 && isPointInRect(vr, x, y, 40)) ||
-                       (cr.width >= 30 && cr.height >= 30 && isPointInRect(cr, x, y, 40));
+                       (hr.width >= 30 && hr.height >= 30 && isPointInRect(hr, x, y, 40));
 
       if (inBounds) {
-        // If it's playing or has buffered frames, it is 100% the active preview video
-        if (!vid.paused || vid.currentTime > 0 || vid.readyState >= 1) {
-          return vid;
+        let score = 10;
+        if (!vid.paused) score += 50;
+        if (vid.currentTime > 0) score += 30;
+        if (vid.readyState >= 1) score += 20;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestVideo = vid;
         }
       }
     }
 
+    if (bestVideo) {
+      return bestVideo;
+    }
+
     // 2. Check cards under cursor for active video or moving WebP thumbnail
-    const elements = document.elementsFromPoint(x, y) || [];
+    const elements = elementsAtPoint;
     for (const el of elements) {
       if (!el || !(el instanceof Element)) continue;
       const card = el.closest(
