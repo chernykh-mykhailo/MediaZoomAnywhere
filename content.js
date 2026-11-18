@@ -2173,8 +2173,6 @@
     }
 
     const panDir = KEYBOARD_PAN_DELTAS[e.key] || KEYBOARD_PAN_DELTAS[e.code];
-    const isImageZoomed = Boolean(activeElement && activeElement.tagName && activeElement.tagName.toLowerCase() !== 'video');
-    const allowPlainArrowsOnImage = isImageZoomed && !e.ctrlKey && !e.altKey && !e.metaKey;
     if (
       config.enabled &&
       config.keyboardPanEnabled &&
@@ -2183,9 +2181,9 @@
       activeState &&
       activeState.scale > 1.0 &&
       !isTypingTarget(e.target) &&
-      (matchesPanModifier(e, config.keyboardPanModifier) || allowPlainArrowsOnImage)
+      matchesPanModifier(e, config.keyboardPanModifier)
     ) {
-      const speedBoost = ((config.keyboardPanModifier === 'none' || allowPlainArrowsOnImage) && e.shiftKey) ? 2.5 : 1;
+      const speedBoost = (config.keyboardPanModifier === 'none' && e.shiftKey) ? 2.5 : 1;
       applyKeyboardPan(e, panDir[0], panDir[1], speedBoost);
       return;
     }
@@ -2202,16 +2200,12 @@
       return;
     }
 
-    const navKeys = ['PageDown', 'PageUp', 'Home', 'End'];
-    if (navKeys.includes(e.key)) {
+    const navKeys = ['PageDown', 'PageUp', 'Home', 'End', 'ArrowLeft', 'ArrowRight'];
+    if (navKeys.includes(e.key) && !isTypingTarget(e.target)) {
       if (config.resetOnMediaChange) {
         resetZoom(activeElement);
       }
       return;
-    }
-
-    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && config.resetOnMediaChange && !isTypingTarget(e.target)) {
-      scheduleMediaSwitchCheck(activeElement);
     }
   }
 
