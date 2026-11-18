@@ -109,6 +109,7 @@
   let lastMouseX = -1;
   let lastMouseY = -1;
   const heldKeyCodes = new Set();
+  let lastRightClickZoomTime = 0;
   let wasZoomedWithRightClick = false;
   let wasZoomedWithSideButton = false;
 
@@ -159,7 +160,10 @@
       const c = config.customActivationKey;
       if (c.code === 'MouseRight') {
         const isDown = (e.buttons & 2) !== 0;
-        if (isDown) wasZoomedWithRightClick = true;
+        if (isDown) {
+          wasZoomedWithRightClick = true;
+          lastRightClickZoomTime = Date.now();
+        }
         return isDown;
       }
       if (c.code === 'MouseMiddle') return (e.buttons & 4) !== 0;
@@ -1474,6 +1478,10 @@
     }
 
     // SCENARIO 2: MODIFIER (Ctrl/Cmd) + WHEEL: ZOOM IN / OUT
+    if (config.modifierKey === 'custom' && config.customActivationKey && config.customActivationKey.code === 'MouseRight') {
+      wasZoomedWithRightClick = true;
+      lastRightClickZoomTime = Date.now();
+    }
     const targetMedia = findTargetMedia(e);
     if (!targetMedia) return;
 
@@ -2052,12 +2060,44 @@
   document.addEventListener('keydown', onKeyDown, { capture: true });
   document.addEventListener('keypress', onKeyUpOrPress, { capture: true });
   document.addEventListener('keyup', onKeyUpOrPress, { capture: true });
-  window.addEventListener('contextmenu', (e) => {
-    if (wasZoomedWithRightClick) {
+  function blockContextMenu(e) {
+    const isCustomRight = config.modifierKey === 'custom' && config.customActivationKey && config.customActivationKey.code === 'MouseRight';
+    const wasRecentlyZoomed = wasZoomedWithRightClick || (Date.now() - lastRightClickZoomTime < 1200);
+    const isOverMedia = Boolean(activeElement || (lastMouseX >= 0 && lastMouseY >= 0 && findTargetMedia({ clientX: lastMouseX, clientY: lastMouseY })) || isEventOnActiveMedia(e));
+
+    if (wasRecentlyZoomed || (isCustomRight && isOverMedia)) {
       e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
       wasZoomedWithRightClick = false;
+
+      // Close YouTube/HTML5 video context menus if already created
+      document.querySelectorAll('.ytp-contextmenu, .ytp-popup').forEach((m) => {
+        m.style.display = 'none';
+      });
+      return false;
     }
-  }, { capture: true });
+  }
+
+  function onRightMouseUp(e) {
+    if (e.button === 2) {
+      const isCustomRight = config.modifierKey === 'custom' && config.customActivationKey && config.customActivationKey.code === 'MouseRight';
+      const wasRecentlyZoomed = wasZoomedWithRightClick || (Date.now() - lastRightClickZoomTime < 1200);
+      const isOverMedia = Boolean(activeElement || (lastMouseX >= 0 && lastMouseY >= 0 && findTargetMedia({ clientX: lastMouseX, clientY: lastMouseY })) || isEventOnActiveMedia(e));
+      if (wasRecentlyZoomed || (isCustomRight && isOverMedia)) {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        document.querySelectorAll('.ytp-contextmenu, .ytp-popup').forEach((m) => {
+          m.style.display = 'none';
+        });
+      }
+    }
+  }
+
+  window.addEventListener('contextmenu', blockContextMenu, { capture: true });
+  document.addEventListener('contextmenu', blockContextMenu, { capture: true });
+  window.addEventListener('pointerup', onRightMouseUp, { capture: true });
+  window.addEventListener('mouseup', onRightMouseUp, { capture: true });
   window.addEventListener('blur', onWindowBlur);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) onWindowBlur();
