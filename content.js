@@ -380,7 +380,36 @@
         }
       } else if (tag === 'img') {
         if (clipped.width < minSize || clipped.height < minSize) continue;
-        if (clipped.area > bestImgArea) {
+
+        // Prefer real high-res images over data: URIs or low-res thumbnail placeholders
+        const isDataUri = (el.src || '').startsWith('data:');
+        const isEncryptedTbn = (el.src || '').includes('encrypted-tbn');
+        const isLowResPlaceholder = isDataUri || isEncryptedTbn;
+        const currentIsPlaceholder = bestImg && ((bestImg.src || '').startsWith('data:') || (bestImg.src || '').includes('encrypted-tbn'));
+
+        const naturalArea = (el.naturalWidth || 0) * (el.naturalHeight || 0);
+        const bestNaturalArea = bestImg ? ((bestImg.naturalWidth || 0) * (bestImg.naturalHeight || 0)) : 0;
+
+        let shouldReplace = false;
+        if (!bestImg) {
+          shouldReplace = true;
+        } else if (currentIsPlaceholder && !isLowResPlaceholder && naturalArea > 0) {
+          shouldReplace = true;
+        } else if (!currentIsPlaceholder && isLowResPlaceholder) {
+          shouldReplace = false;
+        } else if (clipped.area > bestImgArea * 1.25) {
+          shouldReplace = true;
+        } else if (Math.abs(clipped.area - bestImgArea) < bestImgArea * 0.3) {
+          if (naturalArea > bestNaturalArea * 1.5) {
+            shouldReplace = true;
+          } else if (naturalArea >= bestNaturalArea && (el.compareDocumentPosition(bestImg) & Node.DOCUMENT_POSITION_PRECEDING)) {
+            shouldReplace = true;
+          }
+        } else if (clipped.area > bestImgArea) {
+          shouldReplace = true;
+        }
+
+        if (shouldReplace) {
           bestImgArea = clipped.area;
           bestImg = el;
         }
@@ -453,7 +482,10 @@
     '[class*="image-viewer"]:not([aria-hidden="true"])',
     '[class*="photo-viewer"]:not([aria-hidden="true"])',
     '[id*="MediaViewer"]:not([aria-hidden="true"])',
-    '[id*="lightbox"]:not([aria-hidden="true"])'
+    '[id*="lightbox"]:not([aria-hidden="true"])',
+    '[jsname="W25tbd"]',
+    '[jsname="r5xl4"]',
+    'div[jsname="netEmf"]'
   ].join(', ');
 
   function isAppShellElement(el) {
@@ -583,14 +615,27 @@
   function getFocusedMedia() {
     const focused = document.activeElement;
     if (!focused || focused === document.body || focused === document.documentElement) return null;
-    if (focused.tagName && focused.tagName.toLowerCase() === 'video' && isVisible(focused) && getVisibleClippedRect(focused)) {
-      return focused;
+
+    // Direct video, img, canvas
+    if (isMediaNode(focused) && isVisible(focused) && getVisibleClippedRect(focused)) {
+      return resolveMediaNode(focused);
     }
+
+    // Video player container
     const playerContainer = focused.closest('.html5-video-player, #movie_player, [class*="player"]');
     if (playerContainer) {
       const vid = playerContainer.querySelector('video');
       if (vid && isVisible(vid) && getVisibleClippedRect(vid)) return vid;
     }
+
+    // Focused card, item, link, or container with media (e.g. YouTube card, Google Images result)
+    const card = focused.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, [role="article"], [class*="card"], [class*="item"], [class*="thumb"], [class*="preview"], [class*="gallery"], [class*="viewer"]');
+    const searchRoot = card || focused;
+    if (searchRoot && searchRoot.querySelectorAll) {
+      const media = findLargestMedia(searchRoot, 40);
+      if (media) return resolveMediaNode(media);
+    }
+
     return null;
   }
 
@@ -719,6 +764,16 @@
     const path = e.composedPath ? e.composedPath() : [];
     if (path.includes(activeElement)) return true;
 
+    // Direct hit inside the live zoomed element bounding box
+    if (isPointInRect(activeElement.getBoundingClientRect(), e.clientX, e.clientY)) {
+      return true;
+    }
+
+    // Direct hit inside the original media bounding box
+    if (activeState && activeState.origRect && isPointInRect(activeState.origRect, e.clientX, e.clientY)) {
+      return true;
+    }
+
     // Check if event target is inside player container of activeElement
     for (const el of path) {
       if (isVideoPlayerContainer(el, activeElement)) {
@@ -731,10 +786,12 @@
       return true;
     }
 
-    // Check if target is a direct overlay/watermark sitting on top of activeElement
     const target = e.target;
     if (target && target instanceof Element) {
-      if (isWatermarkOrOverlay(target) && activeElement.parentElement && activeElement.parentElement.contains(target)) {
+      if (activeElement.parentElement && activeElement.parentElement.contains(target)) {
+        return true;
+      }
+      if (isWatermarkOrOverlay(target)) {
         return true;
       }
     }
@@ -1270,13 +1327,13 @@
       if (!isVideo && !inModal) {
         let p = targetMedia.parentElement;
         let depth = 0;
-        while (p && p !== document.body && p !== document.documentElement && depth < 5) {
+        while (p && p !== document.body && p !== document.documentElement && depth < 8) {
           const pStyle = window.getComputedStyle(p);
           const isScrollableY = (pStyle.overflowY === 'auto' || pStyle.overflowY === 'scroll') && p.scrollHeight > p.clientHeight;
           const isScrollableX = (pStyle.overflowX === 'auto' || pStyle.overflowX === 'scroll') && p.scrollWidth > p.clientWidth;
 
-          const modX = !isScrollableX && pStyle.overflowX === 'hidden';
-          const modY = !isScrollableY && pStyle.overflowY === 'hidden';
+          const modX = !isScrollableX && (pStyle.overflowX === 'hidden' || pStyle.overflowX === 'clip');
+          const modY = !isScrollableY && (pStyle.overflowY === 'hidden' || pStyle.overflowY === 'clip');
 
           if (modX || modY) {
             activeState.overflowParents.push({
@@ -1591,16 +1648,18 @@
       }
 
       if (activeElement && activeState && activeState.scale > 1.0) {
-        const isPanUp = matchesKeyCombo(e, config.kbdPanUp);
-        const isPanDown = !isPanUp && matchesKeyCombo(e, config.kbdPanDown);
-        if (isPanUp || isPanDown) {
-          applyKeyboardPan(e, 0, isPanUp ? 1 : -1, 1);
+        const isPanLeft = matchesKeyCombo(e, config.kbdPanUp);
+        const isPanRight = !isPanLeft && matchesKeyCombo(e, config.kbdPanDown);
+        if (isPanLeft || isPanRight) {
+          applyKeyboardPan(e, isPanLeft ? 1 : -1, 0, 1);
           return;
         }
       }
     }
 
     const panDir = KEYBOARD_PAN_DELTAS[e.key] || KEYBOARD_PAN_DELTAS[e.code];
+    const isImageZoomed = Boolean(activeElement && activeElement.tagName && activeElement.tagName.toLowerCase() !== 'video');
+    const allowPlainArrowsOnImage = isImageZoomed && !e.ctrlKey && !e.altKey && !e.metaKey;
     if (
       config.enabled &&
       config.keyboardPanEnabled &&
@@ -1609,9 +1668,9 @@
       activeState &&
       activeState.scale > 1.0 &&
       !isTypingTarget(e.target) &&
-      matchesPanModifier(e, config.keyboardPanModifier)
+      (matchesPanModifier(e, config.keyboardPanModifier) || allowPlainArrowsOnImage)
     ) {
-      const speedBoost = (config.keyboardPanModifier === 'none' && e.shiftKey) ? 2.5 : 1;
+      const speedBoost = ((config.keyboardPanModifier === 'none' || allowPlainArrowsOnImage) && e.shiftKey) ? 2.5 : 1;
       applyKeyboardPan(e, panDir[0], panDir[1], speedBoost);
       return;
     }
