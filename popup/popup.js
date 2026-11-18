@@ -55,6 +55,12 @@ function formatKeyCombo(combo, lang = 'en') {
   if (combo.code === 'MouseMiddle') {
     return lang === 'uk' ? 'Колесико миші (клік)' : 'Middle Click';
   }
+  if (combo.code === 'MouseBack') {
+    return lang === 'uk' ? 'Бокова кнопка 1 (Назад)' : 'Mouse 4 (Back)';
+  }
+  if (combo.code === 'MouseForward') {
+    return lang === 'uk' ? 'Бокова кнопка 2 (Вперед)' : 'Mouse 5 (Forward)';
+  }
 
   let keyPart = '';
   if (combo.code && !['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight'].includes(combo.code)) {
@@ -309,28 +315,60 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  document.addEventListener('mousedown', (e) => {
+  function handleMouseRecording(e) {
     if (!isRecording) return;
-    if (e.button === 1 || e.button === 2) {
-      e.preventDefault();
-      e.stopPropagation();
-      const code = e.button === 1 ? 'MouseMiddle' : 'MouseRight';
+    if (e.button === 0) return; // Left click is used to interact with buttons
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    const mouseCodes = {
+      1: { code: 'MouseMiddle', key: 'Middle Click' },
+      2: { code: 'MouseRight', key: 'Right Click' },
+      3: { code: 'MouseBack', key: 'Mouse 4 (Back)' },
+      4: { code: 'MouseForward', key: 'Mouse 5 (Forward)' }
+    };
+
+    const mouseEntry = mouseCodes[e.button];
+    if (mouseEntry) {
       finishRecording({
         ctrl: false,
         alt: false,
         shift: false,
         meta: false,
-        code,
-        key: code === 'MouseMiddle' ? 'Middle Click' : 'Right Click'
+        code: mouseEntry.code,
+        key: mouseEntry.key
       });
     }
-  });
+  }
+
+  document.addEventListener('pointerdown', handleMouseRecording, { capture: true });
+  document.addEventListener('mousedown', handleMouseRecording, { capture: true });
+  document.addEventListener('pointerup', (e) => {
+    if (isRecording && (e.button === 1 || e.button === 2 || e.button === 3 || e.button === 4)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, { capture: true });
+  document.addEventListener('mouseup', (e) => {
+    if (isRecording && (e.button === 1 || e.button === 2 || e.button === 3 || e.button === 4)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, { capture: true });
+  document.addEventListener('auxclick', (e) => {
+    if (isRecording) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, { capture: true });
 
   document.addEventListener('contextmenu', (e) => {
     if (isRecording) {
       e.preventDefault();
     }
-  });
+  }, { capture: true });
 
   zoomSpeed.addEventListener('input', () => {
     const val = Number(zoomSpeed.value);

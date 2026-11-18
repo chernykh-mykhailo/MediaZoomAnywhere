@@ -110,6 +110,7 @@
   let lastMouseY = -1;
   const heldKeyCodes = new Set();
   let wasZoomedWithRightClick = false;
+  let wasZoomedWithSideButton = false;
 
   // Zoom badge element
   let badgeEl = null;
@@ -162,6 +163,16 @@
         return isDown;
       }
       if (c.code === 'MouseMiddle') return (e.buttons & 4) !== 0;
+      if (c.code === 'MouseBack') {
+        const isDown = (e.buttons & 8) !== 0;
+        if (isDown) wasZoomedWithSideButton = true;
+        return isDown;
+      }
+      if (c.code === 'MouseForward') {
+        const isDown = (e.buttons & 16) !== 0;
+        if (isDown) wasZoomedWithSideButton = true;
+        return isDown;
+      }
 
       if (c.ctrl && !(e.ctrlKey || e.metaKey)) return false;
       if (c.alt && !e.altKey) return false;
@@ -1839,6 +1850,10 @@
     if (mod === 'ctrl') return (e.ctrlKey || e.metaKey) && !e.altKey;
     if (mod === 'custom' && config.customPanModifier) {
       const c = config.customPanModifier;
+      if (c.code === 'MouseBack') return (e.buttons & 8) !== 0;
+      if (c.code === 'MouseForward') return (e.buttons & 16) !== 0;
+      if (c.code === 'MouseMiddle') return (e.buttons & 4) !== 0;
+      if (c.code === 'MouseRight') return (e.buttons & 2) !== 0;
       const ctrlMatch = Boolean(c.ctrl) === Boolean(e.ctrlKey || e.metaKey);
       const altMatch = Boolean(c.alt) === Boolean(e.altKey);
       const shiftMatch = Boolean(c.shift) === Boolean(e.shiftKey);
@@ -1994,9 +2009,32 @@
     }
   }
 
+  function preventSideButtonNavigation(e) {
+    if (e.button === 3 || e.button === 4) {
+      const code = config.customActivationKey && config.customActivationKey.code;
+      const isConfiguredSideButton = (code === 'MouseBack' && e.button === 3) || (code === 'MouseForward' && e.button === 4);
+      if (isConfiguredSideButton || wasZoomedWithSideButton) {
+        if (wasZoomedWithSideButton || activeElement || (lastMouseX >= 0 && lastMouseY >= 0 && findTargetMedia({ clientX: lastMouseX, clientY: lastMouseY }))) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+        }
+        if (e.type === 'mouseup' || e.type === 'pointerup' || e.type === 'auxclick') {
+          wasZoomedWithSideButton = false;
+        }
+      }
+    }
+  }
+
   // Listeners with capture phase
   window.addEventListener('wheel', onWheel, { capture: true, passive: false });
   document.addEventListener('wheel', onWheel, { capture: true, passive: false });
+
+  window.addEventListener('pointerdown', preventSideButtonNavigation, { capture: true });
+  window.addEventListener('mousedown', preventSideButtonNavigation, { capture: true });
+  window.addEventListener('pointerup', preventSideButtonNavigation, { capture: true });
+  window.addEventListener('mouseup', preventSideButtonNavigation, { capture: true });
+  window.addEventListener('auxclick', preventSideButtonNavigation, { capture: true });
 
   window.addEventListener('pointerdown', onPointerDown, { capture: true });
   window.addEventListener('pointermove', onPointerMove, { capture: true });
