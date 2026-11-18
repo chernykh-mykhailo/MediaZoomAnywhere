@@ -17,7 +17,7 @@
         </svg>
         <div class="logo-text">
           <h1>Media Zoom Anywhere</h1>
-          <span class="version-tag">v1.0.2</span>
+          <span class="version-tag">v1.0.3</span>
         </div>
       </div>
       <div class="header-actions">
@@ -91,15 +91,26 @@
             <p class="setting-desc" data-i18n="resetOnMediaChangeDesc">Automatically returns zoom to 100% when switching slides, carousel images, or videos.</p>
           </div>
           <label class="switch switch-sm">
-            <input type="checkbox" id="toggleResetOnMediaChange" checked>
+            <input type="checkbox" id="toggleResetOnMediaChange">
             <span class="slider"></span>
           </label>
         </div>
       </section>
 
-      <!-- Section 2: Video Expansion -->
+      <!-- Section 2: Video Settings -->
       <section class="card">
-        <h2 class="section-title" data-i18n="secVideo">Video Expansion Settings</h2>
+        <h2 class="section-title" data-i18n="secVideo">Video Settings</h2>
+
+        <div class="setting-row toggle-row">
+          <div class="setting-info">
+            <label for="toggleKeepVideoZoomOnClicks" class="setting-label" data-i18n="keepVideoZoomOnClicksLabel">Keep zoom on video player clicks</label>
+            <p class="setting-desc" data-i18n="keepVideoZoomOnClicksDesc">Prevents zoom from resetting when clicking play/pause, seeking the timeline, or interacting with player controls.</p>
+          </div>
+          <label class="switch switch-sm">
+            <input type="checkbox" id="toggleKeepVideoZoomOnClicks" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
 
         <!-- Expand preview video outside frame (Temporarily hidden & disabled, see TODO.md) -->
         <div class="setting-row toggle-row" style="display: none;">

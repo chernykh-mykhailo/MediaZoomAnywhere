@@ -16,7 +16,9 @@ const translations = {
     resetOnMediaChangeLabel: 'Reset focus on media change',
     resetOnMediaChangeDesc: 'Automatically returns zoom to 100% when switching slides, carousel images, or videos.',
 
-    secVideo: 'Video Expansion Settings',
+    secVideo: 'Video Settings',
+    keepVideoZoomOnClicksLabel: 'Keep zoom on video player clicks',
+    keepVideoZoomOnClicksDesc: 'Prevents zoom from resetting when clicking play/pause, seeking the timeline, or interacting with player controls.',
     expandPreviewVideosLabel: 'Expand preview video outside frame',
     expandPreviewVideosDesc: 'Allows hover preview videos in feeds (YouTube, X/Twitter, etc.) to break out of their card frame over surrounding elements, just like photos.',
     expandPlayerVideosLabel: 'Expand player video outside frame',
@@ -66,7 +68,9 @@ const translations = {
     resetOnMediaChangeLabel: 'Скидати фокус при зміні медіа',
     resetOnMediaChangeDesc: 'Автоматично повертає масштаб до 100% при перемиканні слайдів або зміні відео.',
 
-    secVideo: 'Розширення відео за межі рамок',
+    secVideo: 'Налаштування відео',
+    keepVideoZoomOnClicksLabel: 'Зберігати зум при взаємодії з відеоплеєром',
+    keepVideoZoomOnClicksDesc: 'Запобігає скиданню зуму під час кліків на паузу/відтворення, перемотування шкали часу чи натискання елементів керування плеєра.',
     expandPreviewVideosLabel: 'Розширювати прев\'ю відео за межі рамки',
     expandPreviewVideosDesc: 'Дозволяє рухомим прев\'ю в стрічках (YouTube, X тощо) виходити за межі картки поверх сусідніх елементів, як звичайні фото.',
     expandPlayerVideosLabel: 'Розширювати відео з плеєра за межі рамки',
@@ -167,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const maxZoomVal = document.getElementById('maxZoomVal');
   const toggleHideScrollbars = document.getElementById('toggleHideScrollbars');
   const toggleResetOnMediaChange = document.getElementById('toggleResetOnMediaChange');
+  const toggleKeepVideoZoomOnClicks = document.getElementById('toggleKeepVideoZoomOnClicks');
   const toggleExpandPreviewVideos = document.getElementById('toggleExpandPreviewVideos');
   const toggleExpandPlayerVideos = document.getElementById('toggleExpandPlayerVideos');
   const toggleKeyboardZoom = document.getElementById('toggleKeyboardZoom');
@@ -257,7 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
     maxZoom: 15,
     language: defaultLang,
     hideScrollbars: true,
-    resetOnMediaChange: true,
+    resetOnMediaChange: false,
+    keepVideoZoomOnClicks: true,
     expandPreviewVideos: false,
     expandPlayerVideos: false,
     keyboardZoomEnabled: true,
@@ -284,7 +290,8 @@ document.addEventListener('DOMContentLoaded', () => {
       maxZoomVal.textContent = `${items.maxZoom}x`;
     }
     if (items.hideScrollbars !== undefined) toggleHideScrollbars.checked = items.hideScrollbars;
-    if (items.resetOnMediaChange !== undefined) toggleResetOnMediaChange.checked = items.resetOnMediaChange;
+    toggleResetOnMediaChange.checked = items.resetOnMediaChange !== undefined ? Boolean(items.resetOnMediaChange) : false;
+    if (items.keepVideoZoomOnClicks !== undefined) toggleKeepVideoZoomOnClicks.checked = Boolean(items.keepVideoZoomOnClicks);
     // Feature temporarily disabled & hidden (see TODO.md)
     if (toggleExpandPreviewVideos) {
       toggleExpandPreviewVideos.checked = false;
@@ -414,6 +421,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   toggleResetOnMediaChange.addEventListener('change', () => {
     safeSave({ resetOnMediaChange: toggleResetOnMediaChange.checked });
+  });
+
+  toggleKeepVideoZoomOnClicks.addEventListener('change', () => {
+    safeSave({ keepVideoZoomOnClicks: toggleKeepVideoZoomOnClicks.checked });
   });
 
   toggleExpandPreviewVideos.addEventListener('change', () => {

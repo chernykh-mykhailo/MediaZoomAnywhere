@@ -19,7 +19,8 @@
     keyboardPanModifier: 'shift',
     customPanModifier: { ctrl: true, alt: false, shift: true, meta: false, code: '', key: '' },
     keyboardPanStep: 200,
-    resetOnMediaChange: true,
+    resetOnMediaChange: false,
+    keepVideoZoomOnClicks: true,
     expandPreviewVideos: false,
     expandPlayerVideos: false
   };
@@ -53,7 +54,8 @@
     if (items.keyboardPanModifier) config.keyboardPanModifier = items.keyboardPanModifier;
     if (items.customPanModifier) config.customPanModifier = items.customPanModifier;
     if (items.keyboardPanStep !== undefined) config.keyboardPanStep = Number(items.keyboardPanStep);
-    if (items.resetOnMediaChange !== undefined) config.resetOnMediaChange = items.resetOnMediaChange;
+    config.resetOnMediaChange = items.resetOnMediaChange !== undefined ? Boolean(items.resetOnMediaChange) : false;
+    if (items.keepVideoZoomOnClicks !== undefined) config.keepVideoZoomOnClicks = items.keepVideoZoomOnClicks;
     // Feed preview expansion is temporarily disabled (see TODO.md)
     config.expandPreviewVideos = false;
     if (items.expandPlayerVideos !== undefined) config.expandPlayerVideos = items.expandPlayerVideos;
@@ -63,7 +65,7 @@
     'enabled', 'modifierKey', 'customActivationKey', 'zoomSpeed', 'maxZoom',
     'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut',
     'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier', 'customPanModifier', 'keyboardPanStep',
-    'resetOnMediaChange', 'expandVideos', 'expandPreviewVideos', 'expandPlayerVideos'
+    'resetOnMediaChange', 'keepVideoZoomOnClicks', 'expandVideos', 'expandPreviewVideos', 'expandPlayerVideos'
   ];
 
   if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -103,6 +105,7 @@
         if (changes.customPanModifier) config.customPanModifier = changes.customPanModifier.newValue;
         if (changes.keyboardPanStep) config.keyboardPanStep = Number(changes.keyboardPanStep.newValue);
         if (changes.resetOnMediaChange) config.resetOnMediaChange = changes.resetOnMediaChange.newValue;
+        if (changes.keepVideoZoomOnClicks !== undefined) config.keepVideoZoomOnClicks = changes.keepVideoZoomOnClicks.newValue;
         config.expandPreviewVideos = false;
         if (changes.expandPlayerVideos) config.expandPlayerVideos = changes.expandPlayerVideos.newValue;
       }
@@ -967,6 +970,52 @@
     return false;
   }
 
+  // Determine if a click or pointer event occurred anywhere on or inside the active video player
+  function isClickOnVideoPlayer(e, videoEl, startedInPlayer = false) {
+    if (!videoEl || !videoEl.isConnected) return false;
+    if (startedInPlayer) return true;
+
+    const path = e.composedPath ? e.composedPath() : [];
+    if (path.includes(videoEl)) return true;
+
+    for (const el of path) {
+      if (isVideoPlayerContainer(el, videoEl)) return true;
+    }
+
+    const target = e.target;
+    if (target && target instanceof Element) {
+      if (videoEl.parentElement && videoEl.parentElement.contains(target)) return true;
+      if (target.closest(
+        '#movie_player, .html5-video-player, ytd-player, ytd-video-preview, #inline-preview-player, ' +
+        '.plyr, .video-js, [class*="player"], [class*="video-container"], [data-player], ' +
+        '.ytp-chrome-bottom, .ytp-chrome-top, .ytp-popup, .ytp-panel, .ytp-contextmenu, .ytp-menu, ' +
+        '[role="slider"], [role="menu"], [class*="scrubber"], [class*="progress"], [class*="control"]'
+      )) {
+        return true;
+      }
+      if (isControlElement(target) || isNativeVideoControlsClick(e)) return true;
+    }
+
+    if (isInsideActiveVideoFrame(e)) return true;
+
+    if (isPointInRect(videoEl.getBoundingClientRect(), e.clientX, e.clientY, 30)) return true;
+    if (activeState && activeState.origRect && isPointInRect(activeState.origRect, e.clientX, e.clientY, 30)) return true;
+
+    const root = videoEl.getRootNode ? videoEl.getRootNode() : null;
+    const shadowHost = (root && root instanceof ShadowRoot) ? root.host : null;
+    const player = videoEl.closest(
+      '#movie_player, .html5-video-player, ytd-player, ytd-video-preview, #inline-preview-player, ' +
+      '.plyr, .video-js, [class*="player"], [class*="video-container"], [data-player], ytd-watch-flexy'
+    ) || shadowHost || videoEl.parentElement;
+
+    if (player && player instanceof Element) {
+      const pr = player.getBoundingClientRect();
+      if (isPointInRect(pr, e.clientX, e.clientY, 40)) return true;
+    }
+
+    return false;
+  }
+
   // Detect real interactive player controls (buttons, bars, sliders, seekbars) so clicks work normally while zoomed
   function isControlElement(target) {
     if (!target || !(target instanceof Element)) return false;
@@ -1551,11 +1600,30 @@
     pointerDownInPlayer = false;
   }
 
+  function parseBaseTransform(transformStr) {
+    if (!transformStr) return { centering: '', inner: '' };
+    let str = transformStr.trim();
+    let centering = '';
+    // Match translate(-50%, ...), translate3d(-50%, ...), translateX(-50%), translateY(-50%)
+    const centeringRegex = /(?:translate(?:3d)?\(\s*-50%[^)]*\)|translateX\(\s*-50%\s*\)|translateY\(\s*-50%\s*\))/gi;
+    const matches = str.match(centeringRegex);
+    if (matches) {
+      centering = matches.join(' ');
+      str = str.replace(centeringRegex, '').replace(/\s+/g, ' ').trim();
+    }
+    return { centering, inner: str };
+  }
+
   function applyTransform(el, scale, panX, panY) {
-    const base = activeState && activeState.baseTransform ? `${activeState.baseTransform} ` : '';
-    const transformVal = `${base}translate(${panX.toFixed(2)}px, ${panY.toFixed(2)}px) scale(${scale.toFixed(3)})`;
+    const centering = activeState && activeState.baseCentering ? `${activeState.baseCentering} ` : '';
+    const inner = activeState && activeState.baseInnerTransform ? ` ${activeState.baseInnerTransform}` : '';
+    // In CSS, centering transforms like translate(-50%, -50%) must remain on the outside (before scale),
+    // otherwise multiplying translate(-50%) by scale doubles the offset and shoots the element off-screen to the left!
+    // Rotation and inner transforms stay on the inside (after scale) so screen panning remains aligned.
+    const transformVal = `${centering}translate(${panX.toFixed(2)}px, ${panY.toFixed(2)}px) scale(${scale.toFixed(3)})${inner}`.trim();
     el.style.setProperty('transform', transformVal, 'important');
-    el.style.setProperty('transform-origin', 'center center', 'important');
+    const origin = (activeState && activeState.baseTransformOrigin) || 'center center';
+    el.style.setProperty('transform-origin', origin, 'important');
     el.style.removeProperty('scale');
     el.style.removeProperty('translate');
   }
@@ -1716,11 +1784,28 @@
     if (activeElement !== targetMedia) {
       activeElement = targetMedia;
 
-      const currentTransform = targetMedia.style.transform || '';
+      // Extract pre-existing transforms (rotation, flip, aspect fit, centering) set by the player or extensions
       let baseTransform = '';
-      if (currentTransform && !currentTransform.includes('scale(') && !currentTransform.includes('translate(')) {
-        baseTransform = currentTransform;
+      const currentTransform = targetMedia.style.transform || '';
+      if (currentTransform) {
+        if (targetMedia.classList.contains('mza-zoomed')) {
+          baseTransform = currentTransform
+            .replace(/translate\([^)]*\)/gi, '')
+            .replace(/scale\([^)]*\)/gi, '')
+            .trim();
+        } else {
+          baseTransform = currentTransform.trim();
+        }
+      } else {
+        const comp = window.getComputedStyle(targetMedia).transform;
+        if (comp && comp !== 'none') {
+          baseTransform = comp.trim();
+        }
       }
+
+      const { centering, inner } = parseBaseTransform(baseTransform);
+      const currentOrigin = targetMedia.style.transformOrigin || '';
+      const baseTransformOrigin = currentOrigin || window.getComputedStyle(targetMedia).transformOrigin || 'center center';
 
       const initRect = targetMedia.getBoundingClientRect();
 
@@ -1732,13 +1817,16 @@
         origCenterX: initRect.left + initRect.width / 2,
         origCenterY: initRect.top + initRect.height / 2,
         baseTransform: baseTransform,
+        baseCentering: centering,
+        baseInnerTransform: inner,
+        baseTransformOrigin: baseTransformOrigin,
         originalStyles: saveOriginalStyles(targetMedia),
         overflowParents: [],
         elevatedControls: []
       };
 
       const isVideo = targetMedia.tagName && targetMedia.tagName.toLowerCase() === 'video';
-      const inModal = Boolean(targetMedia.closest('[role="dialog"], [aria-modal="true"], dialog[open], .modal, .lightbox, .pswp, .viewer, [class*="viewer"], [class*="lightbox"], [class*="modal"]'));
+      const inModal = Boolean(targetMedia.closest('[role="dialog"], [aria-modal="true"], dialog[open], .modal, .lightbox, .pswp, .viewer, [class*="viewer"], [class*="lightbox"], [class*="modal"], [class*="overlay"], [class*="popup"], [class*="photos"], [class*="fullscreen"]'));
       const isFullscreen = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
       const isPreviewVideo = isVideo && isPreviewThumbnailVideo(targetMedia);
       const isPlayerVideo = isVideo && !isPreviewVideo;
@@ -1760,6 +1848,17 @@
       const computed = window.getComputedStyle(targetMedia);
       if (computed.position === 'static') {
         targetMedia.style.position = 'relative';
+      }
+      if (isVideo) {
+        const player = targetMedia.closest('.html5-video-player, #movie_player, [class*="player"]');
+        if (player && typeof player.focus === 'function') {
+          try { player.focus({ preventScroll: true }); } catch (_) {}
+        } else if (typeof targetMedia.focus === 'function') {
+          if (!targetMedia.hasAttribute('tabindex')) {
+            targetMedia.setAttribute('tabindex', '-1');
+          }
+          try { targetMedia.focus({ preventScroll: true }); } catch (_) {}
+        }
       }
       // Elevate zIndex ONLY for images (never for <video>, to avoid breaking player controls or hover preview scrims)
       if (shouldExpand && !isVideo) {
@@ -1847,6 +1946,14 @@
         }
       }
 
+      // Re-measure after initial parent style modifications to ensure origCenterX/Y match the exact screen position
+      const postRect = targetMedia.getBoundingClientRect();
+      if (postRect && postRect.width > 0 && postRect.height > 0) {
+        activeState.origRect = postRect;
+        activeState.origCenterX = postRect.left + postRect.width / 2;
+        activeState.origCenterY = postRect.top + postRect.height / 2;
+      }
+
       observeMediaChanges(targetMedia);
     }
 
@@ -1903,6 +2010,18 @@
     );
   }
 
+  function isRotationOrTransformControl(el) {
+    if (!el || !(el instanceof Element)) return false;
+    const btn = el.closest ? (el.closest('button, a, [role="button"], [class*="btn"], [class*="control"], [class*="item"], div, span') || el) : el;
+    const cls = getElementClassString(btn).toLowerCase();
+    const aria = (btn.getAttribute ? (btn.getAttribute('aria-label') || '') : '').toLowerCase();
+    const title = (btn.getAttribute ? (btn.getAttribute('title') || '') : '').toLowerCase();
+    const dataTitle = (btn.getAttribute ? (btn.getAttribute('data-title') || btn.getAttribute('data-tooltip') || btn.getAttribute('data-action') || '') : '').toLowerCase();
+    const text = (btn.innerText || btn.textContent || '').toLowerCase();
+    const combined = `${cls} ${aria} ${title} ${dataTitle} ${text}`;
+    return /(rotate|flip|turn|orient|mirror|повернути|перевернути|віддзеркалити|вращать)/i.test(combined);
+  }
+
   function scheduleMediaSwitchCheck(prevEl) {
     if (!prevEl || !config.resetOnMediaChange) return;
     [60, 250, 450].forEach((delay) => {
@@ -1919,13 +2038,16 @@
     if (!activeElement || !activeState || activeState.scale <= 1.0) return;
     if (e.button !== 0 && e.button !== 1) return;
 
-    const onPlayer = isEventOnActiveMedia(e);
+    const isVideo = activeElement.tagName && activeElement.tagName.toLowerCase() === 'video';
+    const isYouTubeMedia = window.location.hostname.includes('youtube.com') && (isVideo || Boolean(activeElement.closest && activeElement.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-video-preview, #inline-preview-player')));
+
+    const onPlayer = isEventOnActiveMedia(e) || ((isVideo || isYouTubeMedia) && isClickOnVideoPlayer(e, activeElement, false));
     if (e.type === 'pointerdown' || !pointerDownInPlayer) {
-      pointerDownInPlayer = isActiveVideo() && (onPlayer || isNativeVideoControlsClick(e));
+      pointerDownInPlayer = (isVideo || isYouTubeMedia) && (onPlayer || isNativeVideoControlsClick(e));
     }
 
-    // Allow user to click real controls (close button, arrows, player bars) without dragging or shifting layout before click completes
-    if (isControlElement(e.target) || isNativeVideoControlsClick(e)) {
+    // Allow user to click real controls (close button, arrows, player bars, rotate buttons) without dragging or shifting layout before click completes
+    if (isControlElement(e.target) || isNativeVideoControlsClick(e) || isRotationOrTransformControl(e.target)) {
       return;
     }
 
@@ -1944,9 +2066,12 @@
     activeElement.classList.add('mza-dragging');
     document.documentElement.classList.add('mza-dragging-active');
 
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
+    // Prevent native image ghost dragging, but allow video clicks (play/pause) to pass through naturally
+    if (!isVideo && !isYouTubeMedia) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }
   }
 
   // Pointer & Mouse Move handling
@@ -2005,6 +2130,50 @@
 
     if (activeElement && activeState && activeState.scale > 1.0) {
       const clickedEl = e.target;
+      const isVideo = activeElement.tagName && activeElement.tagName.toLowerCase() === 'video';
+      const isYouTubeMedia = window.location.hostname.includes('youtube.com') && (isVideo || Boolean(activeElement.closest && activeElement.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-video-preview, #inline-preview-player')));
+
+      // Video player click handling:
+      if (isVideo || isYouTubeMedia) {
+        if (config.keepVideoZoomOnClicks) {
+          // If clicking rotation, flip, or re-orientation controls: keep zoom active, yield transform to let the player rotate, then re-apply zoom!
+          if (isRotationOrTransformControl(clickedEl)) {
+            const el = activeElement;
+            if (activeState.baseTransform) {
+              el.style.setProperty('transform', activeState.baseTransform);
+            } else {
+              el.style.removeProperty('transform');
+            }
+
+            setTimeout(() => {
+              if (!activeElement || activeElement !== el || !activeState) return;
+
+              let newBase = el.style.transform || '';
+              if (!newBase) {
+                const comp = window.getComputedStyle(el).transform;
+                if (comp && comp !== 'none') newBase = comp;
+              }
+              newBase = newBase.replace(/translate\([^)]*\)/gi, '').replace(/scale\([^)]*\)/gi, '').trim();
+              const parsed = parseBaseTransform(newBase);
+              activeState.baseTransform = newBase;
+              activeState.baseCentering = parsed.centering;
+              activeState.baseInnerTransform = parsed.inner;
+
+              applyTransform(el, activeState.scale, activeState.panX, activeState.panY);
+            }, 25);
+
+            return;
+          }
+          // Keep zoom active! Never reset zoom on clicks when this setting is enabled!
+          return;
+        } else {
+          // If the user explicitly disabled keepVideoZoomOnClicks in options:
+          resetZoom(activeElement);
+          return;
+        }
+      }
+
+      // For photo galleries & carousel sliders, clicking navigation arrows or thumbnails resets zoom
       if (clickedEl !== activeElement && !isDescendantOrSelf(clickedEl, activeElement) && isResetNavigationControl(clickedEl)) {
         if (config.resetOnMediaChange) {
           resetZoom(activeElement);
@@ -2012,9 +2181,9 @@
         return;
       }
 
-      // Keep zoom when clicking/scrubbing inside a video player (seekbar, timeline, play/pause, controls)
-      const onPlayer = isEventOnActiveMedia(e) || (isActiveVideo() && (startedInPlayer || isNativeVideoControlsClick(e)));
-      if (!onPlayer) {
+      // For non-video media (images/photos/canvas in lightboxes):
+      const onMedia = isEventOnActiveMedia(e);
+      if (!onMedia) {
         resetZoom(activeElement);
         return;
       }
@@ -2026,6 +2195,11 @@
 
   function onDoubleClick(e) {
     if (!activeElement || !activeState || activeState.scale <= 1.0) return;
+    const isVideo = activeElement.tagName && activeElement.tagName.toLowerCase() === 'video';
+    const isYouTubeMedia = window.location.hostname.includes('youtube.com') && (isVideo || Boolean(activeElement.closest && activeElement.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-video-preview, #inline-preview-player')));
+    if ((isVideo || isYouTubeMedia) && config.keepVideoZoomOnClicks) {
+      return; // Do not reset video zoom on double clicks (allows native 10s seek and fullscreen toggle)
+    }
     if (isControlElement(e.target) || isNativeVideoControlsClick(e)) return;
     e.preventDefault();
     e.stopPropagation();
@@ -2121,6 +2295,32 @@
     if (e.code && !isTypingTarget(e.target)) {
       heldKeyCodes.add(e.code);
     }
+
+    // Spacebar play/pause for zoomed video (prevents browser from scrolling page down)
+    if (activeElement && activeState && activeState.scale > 1.0 && !isTypingTarget(e.target)) {
+      const isVideo = activeElement.tagName && activeElement.tagName.toLowerCase() === 'video';
+      if (isVideo && (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        const player = activeElement.closest('.html5-video-player, #movie_player');
+        if (player && typeof player.getPlayerState === 'function' && typeof player.playVideo === 'function' && typeof player.pauseVideo === 'function') {
+          if (player.getPlayerState() === 1) {
+            player.pauseVideo();
+          } else {
+            player.playVideo();
+          }
+        } else {
+          if (activeElement.paused) {
+            activeElement.play().catch(() => {});
+          } else {
+            activeElement.pause();
+          }
+        }
+        return;
+      }
+    }
     if (config.enabled && config.keyboardZoomEnabled && !isTypingTarget(e.target)) {
       const isZoomIn = matchesKeyCombo(e, config.kbdZoomIn);
       const isZoomOut = !isZoomIn && matchesKeyCombo(e, config.kbdZoomOut);
@@ -2173,6 +2373,20 @@
     }
 
     const panDir = KEYBOARD_PAN_DELTAS[e.key] || KEYBOARD_PAN_DELTAS[e.code];
+    const isPlainArrow = (!e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey);
+
+    // Plain arrows without modifiers (no Ctrl, Shift, Alt) must NEVER pan or block gallery navigation!
+    // Let them pass 100% natively to the page so you can freely switch slides / next media.
+    if (isPlainArrow) {
+      if (activeElement && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+        const isVideo = activeElement.tagName && activeElement.tagName.toLowerCase() === 'video';
+        if (!isVideo) {
+          resetZoom(activeElement);
+        }
+      }
+      return;
+    }
+
     if (
       config.enabled &&
       config.keyboardPanEnabled &&
@@ -2226,7 +2440,8 @@
     document.documentElement.classList.remove('mza-dragging-active');
     if (activeElement) {
       activeElement.classList.remove('mza-dragging');
-      if (!activeElement.isConnected || !isVisible(activeElement)) {
+      const isVideo = activeElement.tagName && activeElement.tagName.toLowerCase() === 'video';
+      if (!isVideo && (!activeElement.isConnected || !isVisible(activeElement))) {
         resetZoom(activeElement);
       }
     }
