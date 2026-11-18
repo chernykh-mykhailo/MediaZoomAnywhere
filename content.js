@@ -1053,15 +1053,6 @@
       return primaryPlayer;
     }
 
-    // 7. Document-wide fallback: largest visible media on page
-    const largest = findLargestMedia(document);
-    if (largest) {
-      const clipped = getVisibleClippedRect(largest);
-      if (clipped && clipped.area >= (window.innerWidth * window.innerHeight * 0.08)) {
-        return resolveMediaNode(largest);
-      }
-    }
-
     return null;
   }
 
@@ -1124,6 +1115,18 @@
             item.el.style.setProperty('overflow-y', item.prevOverflowY, item.prevOverflowYPriority || '');
           } else {
             item.el.style.removeProperty('overflow-y');
+          }
+        }
+        if (item.modZ) {
+          if (item.prevZIndex) {
+            item.el.style.setProperty('z-index', item.prevZIndex, item.prevZIndexPriority || '');
+          } else {
+            item.el.style.removeProperty('z-index');
+          }
+          if (item.prevPosition) {
+            item.el.style.setProperty('position', item.prevPosition, item.prevPositionPriority || '');
+          } else {
+            item.el.style.removeProperty('position');
           }
         }
       }
@@ -1334,12 +1337,18 @@
 
           const modX = !isScrollableX && (pStyle.overflowX === 'hidden' || pStyle.overflowX === 'clip');
           const modY = !isScrollableY && (pStyle.overflowY === 'hidden' || pStyle.overflowY === 'clip');
+          const modZ = depth < 6;
 
-          if (modX || modY) {
+          if (modX || modY || modZ) {
             activeState.overflowParents.push({
               el: p,
               modX: modX,
               modY: modY,
+              modZ: modZ,
+              prevPosition: p.style.position,
+              prevPositionPriority: p.style.getPropertyPriority('position'),
+              prevZIndex: p.style.zIndex,
+              prevZIndexPriority: p.style.getPropertyPriority('z-index'),
               prevOverflowX: p.style.overflowX,
               prevOverflowXPriority: p.style.getPropertyPriority('overflow-x'),
               prevOverflowY: p.style.overflowY,
@@ -1347,6 +1356,10 @@
             });
             if (modX) p.style.setProperty('overflow-x', 'visible', 'important');
             if (modY) p.style.setProperty('overflow-y', 'visible', 'important');
+            if (modZ) {
+              if (pStyle.position === 'static') p.style.setProperty('position', 'relative', 'important');
+              p.style.setProperty('z-index', '2147483640', 'important');
+            }
           }
           p = p.parentElement;
           depth++;
@@ -1633,9 +1646,6 @@
         }
         if (!target && lastMouseX >= 0 && lastMouseY >= 0) {
           target = findTargetMedia({ clientX: lastMouseX, clientY: lastMouseY });
-        }
-        if (!target) {
-          target = findLargestMedia(document);
         }
 
         if (target) {
