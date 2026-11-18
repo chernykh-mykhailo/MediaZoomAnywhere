@@ -851,14 +851,26 @@
   // Detect real interactive player controls (buttons, bars, sliders, seekbars) so clicks work normally while zoomed
   function isControlElement(target) {
     if (!target || !(target instanceof Element)) return false;
+
+    // If the click is directly on activeElement or inside it, it is definitely the zoomed media, never a control!
+    if (activeElement && (target === activeElement || activeElement.contains(target))) {
+      return false;
+    }
+
+    // If an <a> tag directly wraps or contains activeElement, it is the media's link wrapper, not a UI control button!
+    const link = target.closest('a');
+    if (link && activeElement && (link.contains(activeElement) || activeElement.contains(link))) {
+      return false;
+    }
+
     const tag = (target.tagName || '').toLowerCase();
-    if (tag === 'button' || tag === 'input' || tag === 'select' || tag === 'a') return true;
+    if (tag === 'button' || tag === 'input' || tag === 'select') return true;
     const role = target.getAttribute ? target.getAttribute('role') : null;
     if (role === 'button' || role === 'slider' || role === 'menuitem' || role === 'menuitemradio' || role === 'menuitemcheckbox') {
       return true;
     }
 
-    if (target.closest('button, a, input, select, [role="button"], [role="slider"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], .ytp-popup, .ytp-panel, .vjs-menu, .plyr__menu')) {
+    if (target.closest('button, input, select, [role="button"], [role="slider"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], .ytp-popup, .ytp-panel, .vjs-menu, .plyr__menu')) {
       return true;
     }
 
@@ -874,11 +886,11 @@
       }
     }
 
-    // Small clickable icons/elements with cursor: pointer
+    // Small clickable icons/elements with cursor: pointer (outside the zoomed media)
     if (activeState && activeState.origRect) {
       const tRect = target.getBoundingClientRect();
       const isSmall = tRect.width < activeState.origRect.width * 0.5 && tRect.height <= 90;
-      if (isSmall && window.getComputedStyle(target).cursor === 'pointer') {
+      if (isSmall && window.getComputedStyle(target).cursor === 'pointer' && !activeElement.contains(target)) {
         return true;
       }
     }
@@ -1160,6 +1172,20 @@
             item.el.style.removeProperty('position');
           }
         }
+        if (item.modContain) {
+          if (item.prevContain) {
+            item.el.style.setProperty('contain', item.prevContain, item.prevContainPriority || '');
+          } else {
+            item.el.style.removeProperty('contain');
+          }
+        }
+        if (item.modClip) {
+          if (item.prevClipPath) {
+            item.el.style.setProperty('clip-path', item.prevClipPath, item.prevClipPathPriority || '');
+          } else {
+            item.el.style.removeProperty('clip-path');
+          }
+        }
       }
     }
 
@@ -1368,30 +1394,38 @@
 
           const modX = !isScrollableX && (pStyle.overflowX === 'hidden' || pStyle.overflowX === 'clip');
           const modY = !isScrollableY && (pStyle.overflowY === 'hidden' || pStyle.overflowY === 'clip');
+          const modContain = Boolean(pStyle.contain && pStyle.contain !== 'none');
+          const modClip = Boolean(pStyle.clipPath && pStyle.clipPath !== 'none');
           const modZ = true;
 
-          if (modX || modY || modZ) {
-            activeState.overflowParents.push({
-              el: p,
-              modX: modX,
-              modY: modY,
-              modZ: modZ,
-              prevPosition: p.style.position,
-              prevPositionPriority: p.style.getPropertyPriority('position'),
-              prevZIndex: p.style.zIndex,
-              prevZIndexPriority: p.style.getPropertyPriority('z-index'),
-              prevOverflowX: p.style.overflowX,
-              prevOverflowXPriority: p.style.getPropertyPriority('overflow-x'),
-              prevOverflowY: p.style.overflowY,
-              prevOverflowYPriority: p.style.getPropertyPriority('overflow-y')
-            });
-            if (modX) p.style.setProperty('overflow-x', 'visible', 'important');
-            if (modY) p.style.setProperty('overflow-y', 'visible', 'important');
-            if (modZ) {
-              if (pStyle.position === 'static') p.style.setProperty('position', 'relative', 'important');
-              p.style.setProperty('z-index', '2147483640', 'important');
-            }
-          }
+          activeState.overflowParents.push({
+            el: p,
+            modX: modX,
+            modY: modY,
+            modZ: modZ,
+            modContain: modContain,
+            modClip: modClip,
+            prevPosition: p.style.position,
+            prevPositionPriority: p.style.getPropertyPriority('position'),
+            prevZIndex: p.style.zIndex,
+            prevZIndexPriority: p.style.getPropertyPriority('z-index'),
+            prevOverflowX: p.style.overflowX,
+            prevOverflowXPriority: p.style.getPropertyPriority('overflow-x'),
+            prevOverflowY: p.style.overflowY,
+            prevOverflowYPriority: p.style.getPropertyPriority('overflow-y'),
+            prevContain: p.style.contain,
+            prevContainPriority: p.style.getPropertyPriority('contain'),
+            prevClipPath: p.style.clipPath,
+            prevClipPathPriority: p.style.getPropertyPriority('clip-path')
+          });
+
+          if (modX) p.style.setProperty('overflow-x', 'visible', 'important');
+          if (modY) p.style.setProperty('overflow-y', 'visible', 'important');
+          if (modContain) p.style.setProperty('contain', 'none', 'important');
+          if (modClip) p.style.setProperty('clip-path', 'none', 'important');
+          if (pStyle.position === 'static') p.style.setProperty('position', 'relative', 'important');
+          p.style.setProperty('z-index', '2147483640', 'important');
+
           p = p.parentElement;
           depth++;
         }
