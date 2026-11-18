@@ -40,8 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const modifierKey = document.getElementById('modifierKey');
   const zoomSpeed = document.getElementById('zoomSpeed');
   const zoomSpeedVal = document.getElementById('zoomSpeedVal');
-  const maxZoom = document.getElementById('maxZoom');
-  const maxZoomVal = document.getElementById('maxZoomVal');
   const langToggle = document.getElementById('langToggle');
   const openOptionsBtn = document.getElementById('openOptionsBtn');
   const moreSettingsBtn = document.getElementById('moreSettingsBtn');
@@ -100,8 +98,6 @@ document.addEventListener('DOMContentLoaded', () => {
     modifierKey.value = items.modifierKey;
     zoomSpeed.value = items.zoomSpeed;
     zoomSpeedVal.textContent = `${Math.round((items.zoomSpeed - 1) * 100)}%`;
-    maxZoom.value = items.maxZoom;
-    maxZoomVal.textContent = `${items.maxZoom}x`;
     applyLanguage(items.language);
   });
 
@@ -114,11 +110,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const val = Number(changes.zoomSpeed.newValue);
         zoomSpeed.value = val;
         zoomSpeedVal.textContent = `${Math.round((val - 1) * 100)}%`;
-      }
-      if (changes.maxZoom) {
-        const val = Number(changes.maxZoom.newValue);
-        maxZoom.value = val;
-        maxZoomVal.textContent = `${val}x`;
       }
       if (changes.language) applyLanguage(changes.language.newValue);
     }
@@ -172,16 +163,5 @@ document.addEventListener('DOMContentLoaded', () => {
   zoomSpeed.addEventListener('change', () => {
     const val = Number(zoomSpeed.value);
     safeSyncSet({ zoomSpeed: val }, 0);
-  });
-
-  maxZoom.addEventListener('input', () => {
-    const val = Number(maxZoom.value);
-    maxZoomVal.textContent = `${val}x`;
-    safeSyncSet({ maxZoom: val }, 250);
-  });
-
-  maxZoom.addEventListener('change', () => {
-    const val = Number(maxZoom.value);
-    safeSyncSet({ maxZoom: val }, 0);
   });
 });
