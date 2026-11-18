@@ -1230,6 +1230,82 @@
     return bestVideo;
   }
 
+  // Dedicated YouTube feed media finder:
+  // When a card is hovered and its preview (HTML5 video or moving WebP animated thumbnail) is active,
+  // this GUARANTEES we target that active preview element instead of the static background thumbnail!
+  function findYouTubeHoverMedia(x, y) {
+    if (!window.location.hostname.includes('youtube.com')) return null;
+
+    // 1. Check global inline preview player if currently playing over cursor
+    const inlineVideos = document.querySelectorAll(
+      'ytd-video-preview#inline-preview-player video, #inline-preview-player video, ytd-video-preview video'
+    );
+    for (const vid of inlineVideos) {
+      if (!vid || !vid.isConnected) continue;
+      const r = vid.getBoundingClientRect();
+      if (r.width >= 40 && r.height >= 40 && isPointInRect(r, x, y, 20)) {
+        const style = window.getComputedStyle(vid);
+        if (style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0.05) {
+          if (!vid.paused || vid.currentTime > 0 || vid.readyState >= 1) {
+            return vid;
+          }
+        }
+      }
+    }
+
+    // 2. Check cards under cursor for active video or moving WebP thumbnail
+    const elements = document.elementsFromPoint(x, y) || [];
+    for (const el of elements) {
+      if (!el || !(el instanceof Element)) continue;
+      const card = el.closest(
+        'ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ' +
+        'ytd-compact-video-renderer, ytd-playlist-video-renderer, ytd-reel-item-renderer, ytd-notification-renderer'
+      );
+      if (!card) continue;
+
+      // 2a. Active video preview in this card
+      const cardVid = card.querySelector(
+        '#hover-overlays video, ytd-video-preview video, #inline-preview-player video, ytd-moving-thumbnail-renderer video'
+      );
+      if (cardVid && cardVid.isConnected) {
+        const vr = cardVid.getBoundingClientRect();
+        if (vr.width >= 40 && vr.height >= 40 && isPointInRect(vr, x, y, 30)) {
+          const vStyle = window.getComputedStyle(cardVid);
+          if (vStyle.display !== 'none' && vStyle.visibility !== 'hidden' && parseFloat(vStyle.opacity) > 0.05) {
+            if (!cardVid.paused || cardVid.currentTime > 0 || cardVid.readyState >= 1) {
+              return cardVid;
+            }
+          }
+        }
+      }
+
+      // 2b. Active moving animated thumbnail (WebP preview in ytd-moving-thumbnail-renderer)
+      const movingImg = card.querySelector(
+        '#hover-overlays ytd-moving-thumbnail-renderer img, ytd-moving-thumbnail-renderer #thumbnail, ytd-moving-thumbnail-renderer img'
+      );
+      if (movingImg && movingImg.isConnected) {
+        const mr = movingImg.getBoundingClientRect();
+        if (mr.width >= 40 && mr.height >= 40 && isPointInRect(mr, x, y, 30)) {
+          const mStyle = window.getComputedStyle(movingImg);
+          if (mStyle.display !== 'none' && mStyle.visibility !== 'hidden' && parseFloat(mStyle.opacity) > 0.05) {
+            return movingImg;
+          }
+        }
+      }
+
+      // 2c. Static thumbnail image in this card (when preview hasn't started or is not available)
+      const staticImg = card.querySelector('ytd-thumbnail img, #thumbnail img, yt-image img');
+      if (staticImg && staticImg.isConnected) {
+        const sr = staticImg.getBoundingClientRect();
+        if (sr.width >= 40 && sr.height >= 40 && isPointInRect(sr, x, y, 30)) {
+          return staticImg;
+        }
+      }
+    }
+
+    return null;
+  }
+
   // Priority search for media
   function findTargetMedia(e) {
     const x = e.clientX;
@@ -1244,7 +1320,15 @@
       }
     }
 
-    // 1. ACTIVE VIDEO UNDER CURSOR:
+    // 1. YouTube card media detection (prioritizes active video / moving WebP preview over static thumbnail)
+    if (window.location.hostname.includes('youtube.com')) {
+      const ytMedia = findYouTubeHoverMedia(x, y);
+      if (ytMedia) {
+        return ytMedia;
+      }
+    }
+
+    // 2. ACTIVE VIDEO UNDER CURSOR:
     // When hovering over an active/playing video or hover preview (e.g. YouTube feed card),
     // always prioritize the video over any static background thumbnail or wrapper underneath!
     const activeVideo = findActiveVideoAtPoint(x, y);
