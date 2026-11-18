@@ -9,6 +9,7 @@ const translations = {
     kbdPanStepLabel: 'Pan step:',
     hideScrollbarsLabel: 'Hide scrollbars when zoomed:',
     resetOnMediaChangeLabel: 'Reset focus on media change:',
+    expandVideosLabel: 'Expand video outside frame:',
     kbdZoomLabel: 'Keyboard zoom (center):',
     kbdInLabel: 'Zoom In',
     kbdOutLabel: 'Zoom Out',
@@ -39,6 +40,7 @@ const translations = {
     kbdPanStepLabel: 'Крок переміщення:',
     hideScrollbarsLabel: 'Приховувати скрол при зумі:',
     resetOnMediaChangeLabel: 'Скидати фокус при зміні медіа:',
+    expandVideosLabel: 'Розширювати відео за межі рамки:',
     kbdZoomLabel: 'Зум з клавіатури (у центр):',
     kbdInLabel: 'Наблизити',
     kbdOutLabel: 'Віддалити',
@@ -101,6 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const keyboardPanStepVal = document.getElementById('keyboardPanStepVal');
   const toggleHideScrollbars = document.getElementById('toggleHideScrollbars');
   const toggleResetOnMediaChange = document.getElementById('toggleResetOnMediaChange');
+  const toggleExpandVideos = document.getElementById('toggleExpandVideos');
   const toggleKeyboardZoom = document.getElementById('toggleKeyboardZoom');
   const kbdBindings = document.getElementById('kbdBindings');
   const toggleKeyboardPan = document.getElementById('toggleKeyboardPan');
@@ -169,6 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
     language: defaultLang,
     hideScrollbars: true,
     resetOnMediaChange: true,
+    expandVideos: false,
     keyboardZoomEnabled: true,
     kbdZoomIn: defaultKbdIn,
     kbdZoomOut: defaultKbdOut,
@@ -189,6 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
     keyboardPanStepVal.textContent = `${panStep}px`;
     toggleHideScrollbars.checked = items.hideScrollbars;
     toggleResetOnMediaChange.checked = items.resetOnMediaChange;
+    toggleExpandVideos.checked = Boolean(items.expandVideos);
     toggleKeyboardZoom.checked = items.keyboardZoomEnabled;
     kbdBindings.style.display = items.keyboardZoomEnabled ? 'grid' : 'none';
     bindings.in.combo = items.kbdZoomIn || defaultKbdIn;
@@ -240,6 +245,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   toggleResetOnMediaChange.addEventListener('change', () => {
     chrome.storage.sync.set({ resetOnMediaChange: toggleResetOnMediaChange.checked });
+  });
+
+  toggleExpandVideos.addEventListener('change', () => {
+    chrome.storage.sync.set({ expandVideos: toggleExpandVideos.checked });
   });
 
   toggleKeyboardZoom.addEventListener('change', () => {

@@ -17,7 +17,8 @@
     keyboardPanEnabled: true,
     keyboardPanModifier: 'shift',
     keyboardPanStep: 200,
-    resetOnMediaChange: true
+    resetOnMediaChange: true,
+    expandVideos: false
   };
 
   // Check support for individual transform properties (Chrome 104+)
@@ -37,7 +38,7 @@
       'enabled', 'modifierKey', 'zoomSpeed', 'maxZoom',
       'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut',
       'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier', 'keyboardPanStep',
-      'resetOnMediaChange'
+      'resetOnMediaChange', 'expandVideos'
     ], (items) => {
       if (items.enabled !== undefined) config.enabled = items.enabled;
       if (items.modifierKey) config.modifierKey = items.modifierKey;
@@ -53,6 +54,7 @@
       if (items.keyboardPanModifier) config.keyboardPanModifier = items.keyboardPanModifier;
       if (items.keyboardPanStep !== undefined) config.keyboardPanStep = Number(items.keyboardPanStep);
       if (items.resetOnMediaChange !== undefined) config.resetOnMediaChange = items.resetOnMediaChange;
+      if (items.expandVideos !== undefined) config.expandVideos = items.expandVideos;
     });
 
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -74,6 +76,7 @@
         if (changes.keyboardPanModifier) config.keyboardPanModifier = changes.keyboardPanModifier.newValue;
         if (changes.keyboardPanStep) config.keyboardPanStep = Number(changes.keyboardPanStep.newValue);
         if (changes.resetOnMediaChange) config.resetOnMediaChange = changes.resetOnMediaChange.newValue;
+        if (changes.expandVideos) config.expandVideos = changes.expandVideos.newValue;
       }
     });
   }
@@ -1373,21 +1376,23 @@
 
       const isVideo = targetMedia.tagName && targetMedia.tagName.toLowerCase() === 'video';
       const inModal = Boolean(targetMedia.closest('[role="dialog"], [aria-modal="true"], dialog[open], .modal, .lightbox, .pswp, .viewer, [class*="viewer"], [class*="lightbox"], [class*="modal"]'));
+      const isFullscreen = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+      const shouldExpand = (!isVideo || config.expandVideos) && !inModal && !isFullscreen;
       const computed = window.getComputedStyle(targetMedia);
       if (computed.position === 'static') {
         targetMedia.style.position = 'relative';
       }
-      // Keep <video> and modal/lightbox media below player/lightbox UI toolbars and close buttons!
-      if (!isVideo && !inModal) {
+      // Elevate zIndex for images and expanded videos
+      if (shouldExpand) {
         targetMedia.style.zIndex = '2147483646';
       }
       targetMedia.classList.add('mza-zoomed');
 
-      // Lift overflow:hidden on direct container parents only for inline thumbnails (not videos or modal viewers, so controls/close buttons stay unobstructed)
-      if (!isVideo && !inModal) {
+      // Lift overflow:hidden and containment on direct container parents for inline thumbnails and expanded videos
+      if (shouldExpand) {
         let p = targetMedia.parentElement;
         let depth = 0;
-        while (p && p !== document.body && p !== document.documentElement && depth < 10) {
+        while (p && p !== document.body && p !== document.documentElement && depth < 15) {
           const pStyle = window.getComputedStyle(p);
           const isScrollableY = (pStyle.overflowY === 'auto' || pStyle.overflowY === 'scroll') && p.scrollHeight > p.clientHeight;
           const isScrollableX = (pStyle.overflowX === 'auto' || pStyle.overflowX === 'scroll') && p.scrollWidth > p.clientWidth;
