@@ -2163,10 +2163,10 @@
       }
 
       if (activeElement && activeState && activeState.scale > 1.0) {
-        const isPanLeft = matchesKeyCombo(e, config.kbdPanUp);
-        const isPanRight = !isPanLeft && matchesKeyCombo(e, config.kbdPanDown);
-        if (isPanLeft || isPanRight) {
-          applyKeyboardPan(e, isPanLeft ? 1 : -1, 0, 1);
+        const isPanUp = matchesKeyCombo(e, config.kbdPanUp);
+        const isPanDown = !isPanUp && matchesKeyCombo(e, config.kbdPanDown);
+        if (isPanUp || isPanDown) {
+          applyKeyboardPan(e, 0, isPanUp ? 1 : -1, 1);
           return;
         }
       }
