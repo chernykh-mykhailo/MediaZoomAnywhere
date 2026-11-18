@@ -793,6 +793,53 @@
     return false;
   }
 
+  function isPreviewThumbnailVideo(videoEl) {
+    if (!videoEl || !(videoEl instanceof Element) || videoEl.tagName.toLowerCase() !== 'video') {
+      return false;
+    }
+
+    // Main players: YouTube watch page, shorts, full-bleed containers, embeds
+    if (
+      videoEl.closest(
+        'ytd-watch-flexy, ytd-watch-grid, ytd-shorts, #full-bleed-container, ' +
+        'ytd-player#ytd-player, #player-container-outer, [role="main"] #movie_player'
+      )
+    ) {
+      return false;
+    }
+
+    // Embed pages or direct watch URLs
+    const path = window.location.pathname || '';
+    if (path.startsWith('/watch') || path.startsWith('/shorts') || path.startsWith('/embed')) {
+      const inSidebar = videoEl.closest('#related, #secondary, ytd-compact-video-renderer, ytd-compact-radio-renderer');
+      if (!inSidebar) {
+        return false;
+      }
+    }
+
+    // Explicit thumbnail preview containers in YouTube feeds/grids
+    if (
+      videoEl.closest(
+        'ytd-moving-thumbnail-renderer, ytd-thumbnail, #inline-preview-player, ' +
+        'ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ' +
+        '[class*="moving-thumbnail"], [class*="thumbnail-preview"]'
+      )
+    ) {
+      return true;
+    }
+
+    // Standalone / primary players (width >= 400 and not inside a card)
+    const player = videoEl.closest('#movie_player, .html5-video-player, .video-js, .plyr');
+    if (player) {
+      const rect = player.getBoundingClientRect();
+      if (rect.width >= 400 && rect.height >= 225) {
+        return false;
+      }
+    }
+
+    return false;
+  }
+
   function isEventOnActiveMedia(e) {
     if (!activeElement || !activeElement.isConnected) return false;
     const path = e.composedPath ? e.composedPath() : [];
@@ -1377,13 +1424,16 @@
       const isVideo = targetMedia.tagName && targetMedia.tagName.toLowerCase() === 'video';
       const inModal = Boolean(targetMedia.closest('[role="dialog"], [aria-modal="true"], dialog[open], .modal, .lightbox, .pswp, .viewer, [class*="viewer"], [class*="lightbox"], [class*="modal"]'));
       const isFullscreen = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
-      const shouldExpand = (!isVideo || config.expandVideos) && !inModal && !isFullscreen;
+      const isPreviewVideo = isVideo && isPreviewThumbnailVideo(targetMedia);
+      // Images expand by default; videos ONLY expand if they are feed preview thumbnails and expandVideos is on.
+      // Standalone/main players (youtube.com/watch, shorts, etc.) NEVER expand outside their container so controls stay visible!
+      const shouldExpand = (!isVideo || (config.expandVideos && isPreviewVideo)) && !inModal && !isFullscreen;
       const computed = window.getComputedStyle(targetMedia);
       if (computed.position === 'static') {
         targetMedia.style.position = 'relative';
       }
-      // Elevate zIndex for images and expanded videos
-      if (shouldExpand) {
+      // Elevate zIndex ONLY for images (never for <video>, so player controls/toolbars remain unobstructed)
+      if (shouldExpand && !isVideo) {
         targetMedia.style.zIndex = '2147483646';
       }
       targetMedia.classList.add('mza-zoomed');
