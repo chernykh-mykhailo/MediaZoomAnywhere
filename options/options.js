@@ -6,6 +6,7 @@ const translations = {
     optCtrl: 'Ctrl / Cmd ⌘ (default)',
     optAlt: 'Alt / Option ⌥',
     optShift: 'Shift',
+    optCustom: 'Custom...',
     zoomSpeedLabel: 'Zoom speed:',
     zoomSpeedDesc: 'Scaling multiplier per wheel notch. Supports speeds up to 300%.',
     maxZoomLabel: 'Max zoom:',
@@ -55,6 +56,7 @@ const translations = {
     optCtrl: 'Ctrl / Cmd ⌘ (за замовчуванням)',
     optAlt: 'Alt / Option ⌥',
     optShift: 'Shift',
+    optCustom: 'Кастом...',
     zoomSpeedLabel: 'Швидкість зуму:',
     zoomSpeedDesc: 'Коефіцієнт наближення за один крок колесика. Підтримує значення до 300%.',
     maxZoomLabel: 'Максимальний зум:',
@@ -103,8 +105,10 @@ const defaultKbdIn = { ctrl: true, alt: false, shift: false, meta: false, code: 
 const defaultKbdOut = { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowDown', key: 'ArrowDown' };
 const defaultKbdPanUp = { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowLeft', key: 'ArrowLeft' };
 const defaultKbdPanDown = { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowRight', key: 'ArrowRight' };
+const defaultCustomActivationKey = { ctrl: false, alt: false, shift: false, meta: false, code: 'KeyZ', key: 'z' };
+const defaultCustomPanModifier = { ctrl: true, alt: false, shift: true, meta: false, code: '', key: '' };
 
-function formatKeyCombo(combo) {
+function formatKeyCombo(combo, lang = 'en') {
   if (!combo) return '';
   const parts = [];
   if (combo.ctrl) parts.push('Ctrl');
@@ -112,20 +116,40 @@ function formatKeyCombo(combo) {
   if (combo.alt) parts.push('Alt');
   if (combo.shift) parts.push('Shift');
 
-  const keyNames = {
-    ArrowUp: '↑',
-    ArrowDown: '↓',
-    ArrowLeft: '←',
-    ArrowRight: '→',
-    Equal: '+',
-    Minus: '-',
-    NumpadAdd: 'Num +',
-    NumpadSubtract: 'Num -'
-  };
+  if (combo.code === 'MouseRight') {
+    return lang === 'uk' ? 'Права кнопка миші' : 'Right Click';
+  }
+  if (combo.code === 'MouseMiddle') {
+    return lang === 'uk' ? 'Колесико миші (клік)' : 'Middle Click';
+  }
 
-  const label = keyNames[combo.code] || keyNames[combo.key] || (combo.key ? combo.key.toUpperCase() : combo.code);
-  parts.push(label);
-  return parts.join(' + ');
+  let keyPart = '';
+  if (combo.code && !['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight'].includes(combo.code)) {
+    const keyNames = {
+      ArrowUp: '↑',
+      ArrowDown: '↓',
+      ArrowLeft: '←',
+      ArrowRight: '→',
+      Equal: '+',
+      Minus: '-',
+      NumpadAdd: 'Num +',
+      NumpadSubtract: 'Num -',
+      Space: lang === 'uk' ? 'Пробіл' : 'Space'
+    };
+    if (keyNames[combo.code]) {
+      keyPart = keyNames[combo.code];
+    } else if (combo.code.startsWith('Key')) {
+      keyPart = combo.code.slice(3);
+    } else if (combo.code.startsWith('Digit')) {
+      keyPart = combo.code.slice(5);
+    } else {
+      keyPart = combo.key ? combo.key.toUpperCase() : combo.code;
+    }
+  }
+  if (keyPart) {
+    parts.push(keyPart);
+  }
+  return parts.length > 0 ? parts.join(' + ') : (lang === 'uk' ? 'Не призначено' : 'None');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -144,6 +168,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleKeyboardPan = document.getElementById('toggleKeyboardPan');
   const kbdPanOptions = document.getElementById('kbdPanOptions');
   const kbdPanModifier = document.getElementById('kbdPanModifier');
+  const customActivationRow = document.getElementById('customActivationRow');
+  const recordCustomActivation = document.getElementById('recordCustomActivation');
+  const customPanModifierRow = document.getElementById('customPanModifierRow');
+  const recordCustomPanModifier = document.getElementById('recordCustomPanModifier');
   const keyboardPanStep = document.getElementById('keyboardPanStep');
   const keyboardPanStepVal = document.getElementById('keyboardPanStepVal');
   const langToggle = document.getElementById('langToggle');
@@ -151,18 +179,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentLang = 'en';
   let recordingTarget = null;
+  let activeModifiers = null;
 
   const bindings = {
-    in: { btn: document.getElementById('bindZoomIn'), storageKey: 'kbdZoomIn', combo: { ...defaultKbdIn } },
-    out: { btn: document.getElementById('bindZoomOut'), storageKey: 'kbdZoomOut', combo: { ...defaultKbdOut } },
-    up: { btn: document.getElementById('bindPanUp'), storageKey: 'kbdPanUp', combo: { ...defaultKbdPanUp } },
-    down: { btn: document.getElementById('bindPanDown'), storageKey: 'kbdPanDown', combo: { ...defaultKbdPanDown } }
+    in: { btn: document.getElementById('bindZoomIn'), storageKey: 'kbdZoomIn', combo: { ...defaultKbdIn }, type: 'keyWithArrows' },
+    out: { btn: document.getElementById('bindZoomOut'), storageKey: 'kbdZoomOut', combo: { ...defaultKbdOut }, type: 'keyWithArrows' },
+    up: { btn: document.getElementById('bindPanUp'), storageKey: 'kbdPanUp', combo: { ...defaultKbdPanUp }, type: 'keyWithArrows' },
+    down: { btn: document.getElementById('bindPanDown'), storageKey: 'kbdPanDown', combo: { ...defaultKbdPanDown }, type: 'keyWithArrows' },
+    customActivation: { btn: recordCustomActivation, storageKey: 'customActivationKey', combo: { ...defaultCustomActivationKey }, type: 'any' },
+    customPanModifier: { btn: recordCustomPanModifier, storageKey: 'customPanModifier', combo: { ...defaultCustomPanModifier }, type: 'modifierOrKey' }
   };
+
+  function updateCustomRowsVisibility() {
+    if (customActivationRow) {
+      customActivationRow.style.display = modifierKey.value === 'custom' ? 'flex' : 'none';
+    }
+    if (customPanModifierRow) {
+      customPanModifierRow.style.display = kbdPanModifier.value === 'custom' ? 'flex' : 'none';
+    }
+  }
 
   function updateBindingButtons() {
     Object.entries(bindings).forEach(([key, entry]) => {
+      if (!entry.btn) return;
       if (recordingTarget !== key) {
-        entry.btn.textContent = formatKeyCombo(entry.combo);
+        entry.btn.textContent = formatKeyCombo(entry.combo, currentLang);
         entry.btn.classList.remove('recording');
       }
     });
@@ -194,9 +235,10 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    if (recordingTarget && bindings[recordingTarget]) {
+    if (recordingTarget && bindings[recordingTarget] && bindings[recordingTarget].btn) {
       bindings[recordingTarget].btn.textContent = dict.pressKeys;
     }
+    updateBindingButtons();
   }
 
   const defaultLang = (navigator.language || 'en').toLowerCase().startsWith('uk') ? 'uk' : 'en';
@@ -204,6 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
   chrome.storage.sync.get({
     enabled: true,
     modifierKey: 'ctrl',
+    customActivationKey: defaultCustomActivationKey,
     zoomSpeed: 1.35,
     maxZoom: 15,
     language: defaultLang,
@@ -218,6 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     kbdPanDown: defaultKbdPanDown,
     keyboardPanEnabled: true,
     keyboardPanModifier: 'shift',
+    customPanModifier: defaultCustomPanModifier,
     keyboardPanStep: 200
   }, (items) => {
     toggleEnabled.checked = items.enabled;
@@ -236,12 +280,15 @@ document.addEventListener('DOMContentLoaded', () => {
     bindings.out.combo = items.kbdZoomOut || defaultKbdOut;
     bindings.up.combo = items.kbdPanUp || defaultKbdPanUp;
     bindings.down.combo = items.kbdPanDown || defaultKbdPanDown;
+    bindings.customActivation.combo = items.customActivationKey || defaultCustomActivationKey;
+    bindings.customPanModifier.combo = items.customPanModifier || defaultCustomPanModifier;
     toggleKeyboardPan.checked = items.keyboardPanEnabled;
     kbdPanOptions.style.display = items.keyboardPanEnabled ? 'block' : 'none';
     kbdPanModifier.value = items.keyboardPanModifier || 'shift';
     const panStep = Number(items.keyboardPanStep) || 200;
     keyboardPanStep.value = panStep;
     keyboardPanStepVal.textContent = `${panStep}px`;
+    updateCustomRowsVisibility();
     updateBindingButtons();
     applyLanguage(items.language);
   });
@@ -282,6 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   modifierKey.addEventListener('change', () => {
+    updateCustomRowsVisibility();
     safeSyncSet({ modifierKey: modifierKey.value });
   });
 
@@ -339,6 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   kbdPanModifier.addEventListener('change', () => {
+    updateCustomRowsVisibility();
     safeSyncSet({ keyboardPanModifier: kbdPanModifier.value });
   });
 
@@ -355,13 +404,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function startRecording(target, btn) {
     recordingTarget = target;
+    activeModifiers = null;
     updateBindingButtons();
     btn.textContent = translations[currentLang].pressKeys;
     btn.classList.add('recording');
   }
 
+  function finishRecording(combo) {
+    if (!recordingTarget) return;
+    const entry = bindings[recordingTarget];
+    if (entry) {
+      entry.combo = combo;
+      safeSyncSet({ [entry.storageKey]: combo }, 0);
+    }
+    recordingTarget = null;
+    activeModifiers = null;
+    updateBindingButtons();
+  }
+
+  function cancelRecording() {
+    recordingTarget = null;
+    activeModifiers = null;
+    updateBindingButtons();
+  }
+
   Object.entries(bindings).forEach(([key, entry]) => {
-    entry.btn.addEventListener('click', () => startRecording(key, entry.btn));
+    if (entry.btn) {
+      entry.btn.addEventListener('click', () => startRecording(key, entry.btn));
+    }
   });
 
   document.addEventListener('keydown', (e) => {
@@ -369,32 +439,93 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
-      return;
-    }
-
     if (e.key === 'Escape') {
-      recordingTarget = null;
-      updateBindingButtons();
+      cancelRecording();
       return;
     }
 
-    const combo = {
+    const entry = bindings[recordingTarget];
+    if (!entry) return;
+
+    if (entry.type === 'keyWithArrows') {
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+        return;
+      }
+      finishRecording({
+        ctrl: e.ctrlKey,
+        alt: e.altKey,
+        shift: e.shiftKey,
+        meta: e.metaKey,
+        code: e.code,
+        key: e.key
+      });
+      return;
+    }
+
+    const isModifierOnly = ['Control', 'Alt', 'Shift', 'Meta'].includes(e.key);
+    if (isModifierOnly) {
+      activeModifiers = {
+        ctrl: e.ctrlKey,
+        alt: e.altKey,
+        shift: e.shiftKey,
+        meta: e.metaKey
+      };
+      const preview = [];
+      if (e.ctrlKey) preview.push('Ctrl');
+      if (e.metaKey) preview.push('Cmd');
+      if (e.altKey) preview.push('Alt');
+      if (e.shiftKey) preview.push('Shift');
+      entry.btn.textContent = preview.join(' + ') + ' + ...';
+      return;
+    }
+
+    finishRecording({
       ctrl: e.ctrlKey,
       alt: e.altKey,
       shift: e.shiftKey,
       meta: e.metaKey,
       code: e.code,
       key: e.key
-    };
+    });
+  });
 
+  document.addEventListener('keyup', (e) => {
+    if (!recordingTarget) return;
     const entry = bindings[recordingTarget];
-    if (entry) {
-      entry.combo = combo;
-      safeSyncSet({ [entry.storageKey]: combo }, 0);
-    }
+    if (!entry || entry.type === 'keyWithArrows') return;
 
-    recordingTarget = null;
-    updateBindingButtons();
+    if (activeModifiers && (activeModifiers.ctrl || activeModifiers.alt || activeModifiers.shift || activeModifiers.meta)) {
+      finishRecording({
+        ctrl: Boolean(activeModifiers.ctrl),
+        alt: Boolean(activeModifiers.alt),
+        shift: Boolean(activeModifiers.shift),
+        meta: Boolean(activeModifiers.meta),
+        code: '',
+        key: ''
+      });
+    }
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (!recordingTarget) return;
+    if (recordingTarget === 'customActivation' && (e.button === 1 || e.button === 2)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const code = e.button === 1 ? 'MouseMiddle' : 'MouseRight';
+      finishRecording({
+        ctrl: false,
+        alt: false,
+        shift: false,
+        meta: false,
+        code,
+        key: code === 'MouseMiddle' ? 'Middle Click' : 'Right Click'
+      });
+    }
+  });
+
+  document.addEventListener('contextmenu', (e) => {
+    if (recordingTarget) {
+      e.preventDefault();
+    }
   });
 });

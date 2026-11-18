@@ -39,11 +39,17 @@
             <label for="modifierKey" class="setting-label" data-i18n="modifierLabel">Activation key:</label>
             <p class="setting-desc" data-i18n="modifierDesc">Hold this key and scroll the mouse wheel over photos or videos to zoom.</p>
           </div>
-          <select id="modifierKey">
-            <option value="ctrl" data-i18n="optCtrl">Ctrl / Cmd ⌘ (default)</option>
-            <option value="alt" data-i18n="optAlt">Alt / Option ⌥</option>
-            <option value="shift" data-i18n="optShift">Shift</option>
-          </select>
+          <div class="custom-select-group">
+            <select id="modifierKey">
+              <option value="ctrl" data-i18n="optCtrl">Ctrl / Cmd ⌘ (default)</option>
+              <option value="alt" data-i18n="optAlt">Alt / Option ⌥</option>
+              <option value="shift" data-i18n="optShift">Shift</option>
+              <option value="custom" data-i18n="optCustom">Custom...</option>
+            </select>
+            <div id="customActivationRow" class="custom-key-row" style="display: none;">
+              <button type="button" id="recordCustomActivation" class="kbd-btn">Z</button>
+            </div>
+          </div>
         </div>
 
         <div class="setting-row">
@@ -166,12 +172,18 @@
         <div class="kbd-pan-options" id="kbdPanOptions">
           <div class="setting-row">
             <label for="kbdPanModifier" class="setting-label" data-i18n="panModifierLabel">Arrow key modifier:</label>
-            <select id="kbdPanModifier">
-              <option value="none" data-i18n="optPanNone">↑ ↓ ← → (Arrows only)</option>
-              <option value="shift" data-i18n="optPanShift" selected>Shift + ↑ ↓ ← →</option>
-              <option value="alt" data-i18n="optPanAlt">Alt + ↑ ↓ ← →</option>
-              <option value="ctrl" data-i18n="optPanCtrl">Ctrl / Cmd + ↑ ↓ ← →</option>
-            </select>
+            <div class="custom-select-group">
+              <select id="kbdPanModifier">
+                <option value="none" data-i18n="optPanNone">↑ ↓ ← → (Arrows only)</option>
+                <option value="shift" data-i18n="optPanShift" selected>Shift + ↑ ↓ ← →</option>
+                <option value="alt" data-i18n="optPanAlt">Alt + ↑ ↓ ← →</option>
+                <option value="ctrl" data-i18n="optPanCtrl">Ctrl / Cmd + ↑ ↓ ← →</option>
+                <option value="custom" data-i18n="optCustom">Custom...</option>
+              </select>
+              <div id="customPanModifierRow" class="custom-key-row" style="display: none;">
+                <button type="button" id="recordCustomPanModifier" class="kbd-btn">Ctrl + Shift</button>
+              </div>
+            </div>
           </div>
 
           <div class="setting-row">

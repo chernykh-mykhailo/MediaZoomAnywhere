@@ -4,9 +4,11 @@ const translations = {
     optCtrl: 'Ctrl / Cmd ⌘ (default)',
     optAlt: 'Alt / Option ⌥',
     optShift: 'Shift',
+    optCustom: 'Custom...',
     zoomSpeedLabel: 'Zoom speed:',
     maxZoomLabel: 'Max zoom:',
     moreSettingsLabel: 'More Settings...',
+    pressKeys: 'Press keys...',
     controlsTitle: 'Controls (Windows / Mac):',
     tips: [
       { key: 'Ctrl (or Cmd ⌘) + Wheel', desc: ' — zoom in/out (or 2-finger Pinch on Mac trackpad).' },
@@ -21,9 +23,11 @@ const translations = {
     optCtrl: 'Ctrl / Cmd ⌘ (за замовчуванням)',
     optAlt: 'Alt / Option ⌥',
     optShift: 'Shift',
+    optCustom: 'Кастом...',
     zoomSpeedLabel: 'Швидкість зуму:',
     maxZoomLabel: 'Максимальний зум:',
     moreSettingsLabel: 'Більше налаштувань...',
+    pressKeys: 'Натисніть клавіші...',
     controlsTitle: 'Керування (Windows / Mac):',
     tips: [
       { key: 'Ctrl (або Cmd ⌘) + Колесико', desc: ' — наближення та віддалення (на Mac також жест двома пальцями Pinch-to-zoom).' },
@@ -35,6 +39,52 @@ const translations = {
   }
 };
 
+const defaultCustomActivationKey = { ctrl: false, alt: false, shift: false, meta: false, code: 'KeyZ', key: 'z' };
+
+function formatKeyCombo(combo, lang = 'en') {
+  if (!combo) return '';
+  const parts = [];
+  if (combo.ctrl) parts.push('Ctrl');
+  if (combo.meta) parts.push('Cmd');
+  if (combo.alt) parts.push('Alt');
+  if (combo.shift) parts.push('Shift');
+
+  if (combo.code === 'MouseRight') {
+    return lang === 'uk' ? 'Права кнопка миші' : 'Right Click';
+  }
+  if (combo.code === 'MouseMiddle') {
+    return lang === 'uk' ? 'Колесико миші (клік)' : 'Middle Click';
+  }
+
+  let keyPart = '';
+  if (combo.code && !['ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'ShiftLeft', 'ShiftRight', 'MetaLeft', 'MetaRight'].includes(combo.code)) {
+    const keyNames = {
+      ArrowUp: '↑',
+      ArrowDown: '↓',
+      ArrowLeft: '←',
+      ArrowRight: '→',
+      Equal: '+',
+      Minus: '-',
+      NumpadAdd: 'Num +',
+      NumpadSubtract: 'Num -',
+      Space: lang === 'uk' ? 'Пробіл' : 'Space'
+    };
+    if (keyNames[combo.code]) {
+      keyPart = keyNames[combo.code];
+    } else if (combo.code.startsWith('Key')) {
+      keyPart = combo.code.slice(3);
+    } else if (combo.code.startsWith('Digit')) {
+      keyPart = combo.code.slice(5);
+    } else {
+      keyPart = combo.key ? combo.key.toUpperCase() : combo.code;
+    }
+  }
+  if (keyPart) {
+    parts.push(keyPart);
+  }
+  return parts.length > 0 ? parts.join(' + ') : (lang === 'uk' ? 'Не призначено' : 'None');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const toggleEnabled = document.getElementById('toggleEnabled');
   const modifierKey = document.getElementById('modifierKey');
@@ -43,9 +93,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const langToggle = document.getElementById('langToggle');
   const openOptionsBtn = document.getElementById('openOptionsBtn');
   const moreSettingsBtn = document.getElementById('moreSettingsBtn');
+  const customActivationRow = document.getElementById('customActivationRow');
+  const recordCustomActivation = document.getElementById('recordCustomActivation');
   const tipsList = document.querySelector('.tips ul');
 
   let currentLang = 'en';
+  let isRecording = false;
+  let activeModifiers = null;
+  let customActivationKey = { ...defaultCustomActivationKey };
+
+  function updateCustomRow() {
+    if (customActivationRow) {
+      customActivationRow.style.display = modifierKey.value === 'custom' ? 'flex' : 'none';
+    }
+    if (recordCustomActivation && !isRecording) {
+      recordCustomActivation.textContent = formatKeyCombo(customActivationKey, currentLang);
+      recordCustomActivation.classList.remove('recording');
+    }
+  }
 
   function applyLanguage(lang) {
     currentLang = translations[lang] ? lang : 'en';
@@ -72,6 +137,8 @@ document.addEventListener('DOMContentLoaded', () => {
         tipsList.appendChild(li);
       });
     }
+
+    updateCustomRow();
   }
 
   function openOptions() {
@@ -90,14 +157,17 @@ document.addEventListener('DOMContentLoaded', () => {
   chrome.storage.sync.get({
     enabled: true,
     modifierKey: 'ctrl',
+    customActivationKey: defaultCustomActivationKey,
     zoomSpeed: 1.35,
     maxZoom: 15,
     language: defaultLang
   }, (items) => {
     toggleEnabled.checked = items.enabled;
     modifierKey.value = items.modifierKey;
+    if (items.customActivationKey) customActivationKey = items.customActivationKey;
     zoomSpeed.value = items.zoomSpeed;
     zoomSpeedVal.textContent = `${Math.round((items.zoomSpeed - 1) * 100)}%`;
+    updateCustomRow();
     applyLanguage(items.language);
   });
 
@@ -105,7 +175,14 @@ document.addEventListener('DOMContentLoaded', () => {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync' || area === 'local') {
       if (changes.enabled) toggleEnabled.checked = changes.enabled.newValue;
-      if (changes.modifierKey) modifierKey.value = changes.modifierKey.newValue;
+      if (changes.modifierKey) {
+        modifierKey.value = changes.modifierKey.newValue;
+        updateCustomRow();
+      }
+      if (changes.customActivationKey) {
+        customActivationKey = changes.customActivationKey.newValue;
+        updateCustomRow();
+      }
       if (changes.zoomSpeed) {
         const val = Number(changes.zoomSpeed.newValue);
         zoomSpeed.value = val;
@@ -151,7 +228,108 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   modifierKey.addEventListener('change', () => {
+    updateCustomRow();
     safeSyncSet({ modifierKey: modifierKey.value });
+  });
+
+  function startRecording() {
+    isRecording = true;
+    activeModifiers = null;
+    recordCustomActivation.textContent = translations[currentLang].pressKeys;
+    recordCustomActivation.classList.add('recording');
+  }
+
+  function finishRecording(combo) {
+    if (!isRecording) return;
+    customActivationKey = combo;
+    safeSyncSet({ customActivationKey: combo }, 0);
+    isRecording = false;
+    activeModifiers = null;
+    updateCustomRow();
+  }
+
+  function cancelRecording() {
+    isRecording = false;
+    activeModifiers = null;
+    updateCustomRow();
+  }
+
+  if (recordCustomActivation) {
+    recordCustomActivation.addEventListener('click', startRecording);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (!isRecording) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.key === 'Escape') {
+      cancelRecording();
+      return;
+    }
+
+    const isModifierOnly = ['Control', 'Alt', 'Shift', 'Meta'].includes(e.key);
+    if (isModifierOnly) {
+      activeModifiers = {
+        ctrl: e.ctrlKey,
+        alt: e.altKey,
+        shift: e.shiftKey,
+        meta: e.metaKey
+      };
+      const preview = [];
+      if (e.ctrlKey) preview.push('Ctrl');
+      if (e.metaKey) preview.push('Cmd');
+      if (e.altKey) preview.push('Alt');
+      if (e.shiftKey) preview.push('Shift');
+      recordCustomActivation.textContent = preview.join(' + ') + ' + ...';
+      return;
+    }
+
+    finishRecording({
+      ctrl: e.ctrlKey,
+      alt: e.altKey,
+      shift: e.shiftKey,
+      meta: e.metaKey,
+      code: e.code,
+      key: e.key
+    });
+  });
+
+  document.addEventListener('keyup', (e) => {
+    if (!isRecording) return;
+    if (activeModifiers && (activeModifiers.ctrl || activeModifiers.alt || activeModifiers.shift || activeModifiers.meta)) {
+      finishRecording({
+        ctrl: Boolean(activeModifiers.ctrl),
+        alt: Boolean(activeModifiers.alt),
+        shift: Boolean(activeModifiers.shift),
+        meta: Boolean(activeModifiers.meta),
+        code: '',
+        key: ''
+      });
+    }
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (!isRecording) return;
+    if (e.button === 1 || e.button === 2) {
+      e.preventDefault();
+      e.stopPropagation();
+      const code = e.button === 1 ? 'MouseMiddle' : 'MouseRight';
+      finishRecording({
+        ctrl: false,
+        alt: false,
+        shift: false,
+        meta: false,
+        code,
+        key: code === 'MouseMiddle' ? 'Middle Click' : 'Right Click'
+      });
+    }
+  });
+
+  document.addEventListener('contextmenu', (e) => {
+    if (isRecording) {
+      e.preventDefault();
+    }
   });
 
   zoomSpeed.addEventListener('input', () => {

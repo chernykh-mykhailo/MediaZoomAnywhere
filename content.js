@@ -3,6 +3,7 @@
   const config = {
     enabled: true,
     modifierKey: 'ctrl',
+    customActivationKey: { ctrl: false, alt: false, shift: false, meta: false, code: 'KeyZ', key: 'z' },
     zoomSpeed: 1.35,
     maxZoom: 15.0,
     minZoom: 1.0,
@@ -16,6 +17,7 @@
     kbdPanDown: { ctrl: true, alt: false, shift: false, meta: false, code: 'ArrowRight', key: 'ArrowRight' },
     keyboardPanEnabled: true,
     keyboardPanModifier: 'shift',
+    customPanModifier: { ctrl: true, alt: false, shift: true, meta: false, code: '', key: '' },
     keyboardPanStep: 200,
     resetOnMediaChange: true,
     expandPreviewVideos: false,
@@ -36,13 +38,14 @@
   // Load saved settings
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
     chrome.storage.sync.get([
-      'enabled', 'modifierKey', 'zoomSpeed', 'maxZoom',
+      'enabled', 'modifierKey', 'customActivationKey', 'zoomSpeed', 'maxZoom',
       'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut',
-      'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier', 'keyboardPanStep',
+      'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier', 'customPanModifier', 'keyboardPanStep',
       'resetOnMediaChange', 'expandVideos', 'expandPreviewVideos', 'expandPlayerVideos'
     ], (items) => {
       if (items.enabled !== undefined) config.enabled = items.enabled;
       if (items.modifierKey) config.modifierKey = items.modifierKey;
+      if (items.customActivationKey) config.customActivationKey = items.customActivationKey;
       if (items.zoomSpeed) config.zoomSpeed = Number(items.zoomSpeed);
       if (items.maxZoom) config.maxZoom = Number(items.maxZoom);
       if (items.hideScrollbars !== undefined) config.hideScrollbars = items.hideScrollbars;
@@ -53,6 +56,7 @@
       if (items.kbdPanDown) config.kbdPanDown = items.kbdPanDown;
       if (items.keyboardPanEnabled !== undefined) config.keyboardPanEnabled = items.keyboardPanEnabled;
       if (items.keyboardPanModifier) config.keyboardPanModifier = items.keyboardPanModifier;
+      if (items.customPanModifier) config.customPanModifier = items.customPanModifier;
       if (items.keyboardPanStep !== undefined) config.keyboardPanStep = Number(items.keyboardPanStep);
       if (items.resetOnMediaChange !== undefined) config.resetOnMediaChange = items.resetOnMediaChange;
       if (items.expandPreviewVideos !== undefined) {
@@ -67,6 +71,7 @@
       if (area === 'sync' || area === 'local') {
         if (changes.enabled) config.enabled = changes.enabled.newValue;
         if (changes.modifierKey) config.modifierKey = changes.modifierKey.newValue;
+        if (changes.customActivationKey) config.customActivationKey = changes.customActivationKey.newValue;
         if (changes.zoomSpeed) config.zoomSpeed = Number(changes.zoomSpeed.newValue);
         if (changes.maxZoom) config.maxZoom = Number(changes.maxZoom.newValue);
         if (changes.hideScrollbars) {
@@ -80,6 +85,7 @@
         if (changes.kbdPanDown) config.kbdPanDown = changes.kbdPanDown.newValue;
         if (changes.keyboardPanEnabled) config.keyboardPanEnabled = changes.keyboardPanEnabled.newValue;
         if (changes.keyboardPanModifier) config.keyboardPanModifier = changes.keyboardPanModifier.newValue;
+        if (changes.customPanModifier) config.customPanModifier = changes.customPanModifier.newValue;
         if (changes.keyboardPanStep) config.keyboardPanStep = Number(changes.keyboardPanStep.newValue);
         if (changes.resetOnMediaChange) config.resetOnMediaChange = changes.resetOnMediaChange.newValue;
         if (changes.expandPreviewVideos) config.expandPreviewVideos = changes.expandPreviewVideos.newValue;
@@ -102,6 +108,8 @@
   let pointerDownInPlayer = false;
   let lastMouseX = -1;
   let lastMouseY = -1;
+  const heldKeyCodes = new Set();
+  let wasZoomedWithRightClick = false;
 
   // Zoom badge element
   let badgeEl = null;
@@ -146,6 +154,29 @@
     if (config.modifierKey === 'alt') return e.altKey;
     if (config.modifierKey === 'shift') return e.shiftKey;
     if (config.modifierKey === 'cmd') return e.metaKey;
+    if (config.modifierKey === 'custom' && config.customActivationKey) {
+      const c = config.customActivationKey;
+      if (c.code === 'MouseRight') {
+        const isDown = (e.buttons & 2) !== 0;
+        if (isDown) wasZoomedWithRightClick = true;
+        return isDown;
+      }
+      if (c.code === 'MouseMiddle') return (e.buttons & 4) !== 0;
+
+      if (c.ctrl && !(e.ctrlKey || e.metaKey)) return false;
+      if (c.alt && !e.altKey) return false;
+      if (c.shift && !e.shiftKey) return false;
+      if (c.meta && !e.metaKey) return false;
+
+      if (c.code) {
+        return heldKeyCodes.has(c.code);
+      }
+      const ctrlMatch = Boolean(c.ctrl) === Boolean(e.ctrlKey || e.metaKey);
+      const altMatch = Boolean(c.alt) === Boolean(e.altKey);
+      const shiftMatch = Boolean(c.shift) === Boolean(e.shiftKey);
+      const metaMatch = Boolean(c.meta) === Boolean(e.metaKey);
+      return ctrlMatch && altMatch && shiftMatch && metaMatch;
+    }
     return e.ctrlKey || e.metaKey;
   }
 
@@ -1790,6 +1821,9 @@
   }
 
   function onKeyUpOrPress(e) {
+    if (e.type === 'keyup' && e.code) {
+      heldKeyCodes.delete(e.code);
+    }
     if (blockedKeyCodes.has(e.code)) {
       blockKeyEvent(e);
       if (e.type === 'keyup') {
@@ -1803,6 +1837,17 @@
     if (mod === 'shift') return e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
     if (mod === 'alt') return e.altKey && !e.ctrlKey && !e.metaKey;
     if (mod === 'ctrl') return (e.ctrlKey || e.metaKey) && !e.altKey;
+    if (mod === 'custom' && config.customPanModifier) {
+      const c = config.customPanModifier;
+      const ctrlMatch = Boolean(c.ctrl) === Boolean(e.ctrlKey || e.metaKey);
+      const altMatch = Boolean(c.alt) === Boolean(e.altKey);
+      const shiftMatch = Boolean(c.shift) === Boolean(e.shiftKey);
+      const metaMatch = Boolean(c.meta) === Boolean(e.metaKey);
+      if (c.code) {
+        return ctrlMatch && altMatch && shiftMatch && metaMatch && (e.code === c.code || heldKeyCodes.has(c.code));
+      }
+      return ctrlMatch && altMatch && shiftMatch && metaMatch;
+    }
     return false;
   }
 
@@ -1830,6 +1875,9 @@
 
   // Keyboard zoom + arrow pan + navigation resets
   function onKeyDown(e) {
+    if (e.code && !isTypingTarget(e.target)) {
+      heldKeyCodes.add(e.code);
+    }
     if (config.enabled && config.keyboardZoomEnabled && !isTypingTarget(e.target)) {
       const isZoomIn = matchesKeyCombo(e, config.kbdZoomIn);
       const isZoomOut = !isZoomIn && matchesKeyCombo(e, config.kbdZoomOut);
@@ -1935,6 +1983,7 @@
     isDragging = false;
     hasDragged = false;
     pointerDownInPlayer = false;
+    heldKeyCodes.clear();
     blockedKeyCodes.clear();
     document.documentElement.classList.remove('mza-dragging-active');
     if (activeElement) {
@@ -1965,6 +2014,12 @@
   document.addEventListener('keydown', onKeyDown, { capture: true });
   document.addEventListener('keypress', onKeyUpOrPress, { capture: true });
   document.addEventListener('keyup', onKeyUpOrPress, { capture: true });
+  window.addEventListener('contextmenu', (e) => {
+    if (wasZoomedWithRightClick) {
+      e.preventDefault();
+      wasZoomedWithRightClick = false;
+    }
+  }, { capture: true });
   window.addEventListener('blur', onWindowBlur);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) onWindowBlur();
