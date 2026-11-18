@@ -20,7 +20,7 @@
     customPanModifier: { ctrl: true, alt: false, shift: true, meta: false, code: '', key: '' },
     keyboardPanStep: 200,
     resetOnMediaChange: true,
-    expandPreviewVideos: false,
+    expandPreviewVideos: true,
     expandPlayerVideos: false
   };
 
@@ -1236,23 +1236,11 @@
     const y = e.clientY;
 
     // 0. Active element lock during continuous zooming:
+    // When an element is already active and zoomed (> 1.0), KEEP ZOOMING IT!
+    // Never switch targets or bounce between <img> and <video> mid-zoom!
     if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected) {
-      // If activeElement is a <video>, NEVER downgrade to underlying thumbnail during continuous zoom!
-      if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'video') {
-        if (isCursorNearElement(activeElement, x, y, 160) || isPointInsidePlayerOf(activeElement, x, y) || isWheelOverActiveMedia(e)) {
-          return activeElement;
-        }
-      }
-
-      // If activeElement is an <img>, check if a hover preview video spawned inside the same card/container
-      if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'img') {
-        const activeVid = findActiveVideoAtPoint(x, y);
-        if (activeVid) {
-          return activeVid;
-        }
-        if (isCursorNearElement(activeElement, x, y, 160) || isPointInRect(activeElement.getBoundingClientRect(), x, y)) {
-          return activeElement;
-        }
+      if (isCursorNearElement(activeElement, x, y, 200) || isPointInsidePlayerOf(activeElement, x, y) || isWheelOverActiveMedia(e)) {
+        return activeElement;
       }
     }
 
@@ -1267,16 +1255,6 @@
     // 2. Direct media under cursor (always top priority when hovering an image/video/canvas)
     const directMedia = findDirectMediaAtPoint(x, y, e);
     if (directMedia) {
-      if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected) {
-        if (activeElement === directMedia) {
-          return activeElement;
-        }
-        if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'video') {
-          if (isCursorNearElement(activeElement, x, y, 160) || isPointInsidePlayerOf(activeElement, x, y) || isWheelOverActiveMedia(e)) {
-            return activeElement;
-          }
-        }
-      }
       return directMedia;
     }
 
@@ -1649,9 +1627,13 @@
 
       // Lift overflow:hidden and containment on direct container parents for inline thumbnails and expanded videos
       if (shouldExpand) {
-        let p = targetMedia.parentElement;
+        let p = getParentAcrossShadow(targetMedia);
         let depth = 0;
-        while (p && p !== document.body && p !== document.documentElement && depth < 15) {
+        while (p && p !== document.body && p !== document.documentElement && depth < 20) {
+          if (!(p instanceof Element)) {
+            p = getParentAcrossShadow(p);
+            continue;
+          }
           const pStyle = window.getComputedStyle(p);
           const isScrollableY = (pStyle.overflowY === 'auto' || pStyle.overflowY === 'scroll') && p.scrollHeight > p.clientHeight;
           const isScrollableX = (pStyle.overflowX === 'auto' || pStyle.overflowX === 'scroll') && p.scrollWidth > p.clientWidth;
@@ -1712,7 +1694,7 @@
             }
           }
 
-          p = p.parentElement;
+          p = getParentAcrossShadow(p);
           depth++;
         }
       }
@@ -2184,7 +2166,7 @@
   }
 
   function onRightMouseUp(e) {
-    if (e.button === 2 || !(e.buttons & 2)) {
+    if (e.button === 2) {
       isRightClickHeld = false;
     }
     if (e.button === 2) {
