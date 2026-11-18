@@ -6,8 +6,14 @@ $zipPath = Join-Path $distDir "media-zoom-anywhere.zip"
 
 Write-Host "Creating release package..." -ForegroundColor Cyan
 
-if (Test-Path $distDir) {
-    Remove-Item $distDir -Recurse -Force
+if (-not (Test-Path $distDir)) {
+    New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+}
+if (Test-Path $tempDir) {
+    Remove-Item $tempDir -Recurse -Force
+}
+if (Test-Path $zipPath) {
+    Remove-Item $zipPath -Force
 }
 New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
