@@ -794,7 +794,7 @@
 
   function isPointInsidePlayerOf(el, x, y) {
     if (!el || !el.isConnected) return false;
-    const player = el.closest('#movie_player, .html5-video-player, .video-container, ytd-video-preview, #inline-preview-player, ytd-thumbnail, ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-compact-video-renderer');
+    const player = el.closest('#movie_player, .html5-video-player, .video-container, #video-preview, ytd-video-preview, #inline-preview-player, ytd-thumbnail, ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-compact-video-renderer');
     if (!player) return false;
     const r = player.getBoundingClientRect();
     return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
@@ -1236,19 +1236,28 @@
   function findYouTubeHoverMedia(x, y) {
     if (!window.location.hostname.includes('youtube.com')) return null;
 
-    // 1. Check global inline preview player if currently playing over cursor
-    const inlineVideos = document.querySelectorAll(
-      'ytd-video-preview#inline-preview-player video, #inline-preview-player video, ytd-video-preview video'
-    );
-    for (const vid of inlineVideos) {
+    // 1. Check all videos across the page: if any video is active/playing under cursor or its card, target it!
+    const allVideos = document.querySelectorAll('video');
+    for (const vid of allVideos) {
       if (!vid || !vid.isConnected) continue;
-      const r = vid.getBoundingClientRect();
-      if (r.width >= 40 && r.height >= 40 && isPointInRect(r, x, y, 20)) {
-        const style = window.getComputedStyle(vid);
-        if (style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity) > 0.05) {
-          if (!vid.paused || vid.currentTime > 0 || vid.readyState >= 1) {
-            return vid;
-          }
+      const vStyle = window.getComputedStyle(vid);
+      if (vStyle.display === 'none' || vStyle.visibility === 'hidden' || parseFloat(vStyle.opacity) < 0.05) continue;
+
+      const vr = vid.getBoundingClientRect();
+      const container = vid.closest(
+        '#inline-preview-player, ytd-video-preview, #video-preview, .html5-video-player, ytd-moving-thumbnail-renderer, ' +
+        'ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ' +
+        '[class*="player"], [class*="preview"]'
+      ) || vid;
+      const cr = container.getBoundingClientRect();
+
+      const inBounds = (vr.width >= 30 && vr.height >= 30 && isPointInRect(vr, x, y, 40)) ||
+                       (cr.width >= 30 && cr.height >= 30 && isPointInRect(cr, x, y, 40));
+
+      if (inBounds) {
+        // If it's playing or has buffered frames, it is 100% the active preview video
+        if (!vid.paused || vid.currentTime > 0 || vid.readyState >= 1) {
+          return vid;
         }
       }
     }
@@ -1263,18 +1272,14 @@
       );
       if (!card) continue;
 
-      // 2a. Active video preview in this card
-      const cardVid = card.querySelector(
-        '#hover-overlays video, ytd-video-preview video, #inline-preview-player video, ytd-moving-thumbnail-renderer video'
-      );
+      // 2a. Active or ready video preview inside this card
+      const cardVid = card.querySelector('video');
       if (cardVid && cardVid.isConnected) {
         const vr = cardVid.getBoundingClientRect();
-        if (vr.width >= 40 && vr.height >= 40 && isPointInRect(vr, x, y, 30)) {
+        if (vr.width >= 30 && vr.height >= 30 && isPointInRect(vr, x, y, 40)) {
           const vStyle = window.getComputedStyle(cardVid);
           if (vStyle.display !== 'none' && vStyle.visibility !== 'hidden' && parseFloat(vStyle.opacity) > 0.05) {
-            if (!cardVid.paused || cardVid.currentTime > 0 || cardVid.readyState >= 1) {
-              return cardVid;
-            }
+            return cardVid;
           }
         }
       }
@@ -1704,7 +1709,7 @@
       if (shouldExpand && (!isVideo || isPreviewVideo)) {
         targetMedia.style.zIndex = '2147483646';
       }
-      if (shouldExpand) {
+      if (shouldExpand && !isVideo) {
         targetMedia.style.pointerEvents = 'auto';
       }
       targetMedia.classList.add('mza-zoomed');
