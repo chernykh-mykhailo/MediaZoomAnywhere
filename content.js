@@ -999,6 +999,22 @@
       }
     }
 
+    // Check if any element at point is inside a card/feed item with an active video preview (e.g. YouTube moving thumbnail!)
+    for (const el of elements) {
+      if (!el || !(el instanceof Element)) continue;
+      const card = el.closest(
+        'ytd-thumbnail, ytd-moving-thumbnail-renderer, #inline-preview-player, #mouseover-overlay, ' +
+        'ytd-rich-grid-media, ytd-rich-item-renderer, ytd-video-renderer, ytd-compact-video-renderer, ytd-grid-video-renderer, ' +
+        '[class*="thumbnail"], [class*="preview"], [class*="video-card"]'
+      );
+      if (card) {
+        const vid = card.querySelector('video');
+        if (vid && isValidCandidate(vid, 40, 40) && isCursorNearElement(vid, x, y, 40)) {
+          return vid;
+        }
+      }
+    }
+
     for (const el of topElements) {
       if (el === document.body || el === document.documentElement) continue;
       const vid = el.querySelector('video');
@@ -1095,6 +1111,17 @@
     if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected && isVisible(activeElement) && getVisibleClippedRect(activeElement)) {
       if (openModal) {
         return isDescendantOrSelf(activeElement, openModal.viewer) ? activeElement : openModal.media;
+      }
+
+      // If activeElement is an image, but a preview video started playing in the card, switch to the video!
+      if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'img') {
+        const parentCard = activeElement.closest('ytd-thumbnail, ytd-moving-thumbnail-renderer, [class*="thumbnail"], [class*="video-card"]');
+        if (parentCard) {
+          const activeVid = parentCard.querySelector('video');
+          if (activeVid && isVisible(activeVid)) {
+            return activeVid;
+          }
+        }
       }
 
       if (isCursorNearElement(activeElement, x, y, 160) || isPointInsidePlayerOf(activeElement, x, y)) {
