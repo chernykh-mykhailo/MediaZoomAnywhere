@@ -9,7 +9,8 @@ const translations = {
     kbdPanStepLabel: 'Pan step:',
     hideScrollbarsLabel: 'Hide scrollbars when zoomed:',
     resetOnMediaChangeLabel: 'Reset focus on media change:',
-    expandVideosLabel: 'Expand preview video outside frame:',
+    expandPreviewVideosLabel: 'Expand preview video outside frame:',
+    expandPlayerVideosLabel: 'Expand player video outside frame:',
     kbdZoomLabel: 'Keyboard zoom (center):',
     kbdInLabel: 'Zoom In',
     kbdOutLabel: 'Zoom Out',
@@ -40,7 +41,8 @@ const translations = {
     kbdPanStepLabel: 'Крок переміщення:',
     hideScrollbarsLabel: 'Приховувати скрол при зумі:',
     resetOnMediaChangeLabel: 'Скидати фокус при зміні медіа:',
-    expandVideosLabel: 'Розширювати прев\'ю відео за межі рамки:',
+    expandPreviewVideosLabel: 'Розширювати прев\'ю відео за межі рамки:',
+    expandPlayerVideosLabel: 'Розширювати відео з плеєра за межі рамки:',
     kbdZoomLabel: 'Зум з клавіатури (у центр):',
     kbdInLabel: 'Наблизити',
     kbdOutLabel: 'Віддалити',
@@ -103,7 +105,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const keyboardPanStepVal = document.getElementById('keyboardPanStepVal');
   const toggleHideScrollbars = document.getElementById('toggleHideScrollbars');
   const toggleResetOnMediaChange = document.getElementById('toggleResetOnMediaChange');
-  const toggleExpandVideos = document.getElementById('toggleExpandVideos');
+  const toggleExpandPreviewVideos = document.getElementById('toggleExpandPreviewVideos');
+  const toggleExpandPlayerVideos = document.getElementById('toggleExpandPlayerVideos');
   const toggleKeyboardZoom = document.getElementById('toggleKeyboardZoom');
   const kbdBindings = document.getElementById('kbdBindings');
   const toggleKeyboardPan = document.getElementById('toggleKeyboardPan');
@@ -172,7 +175,8 @@ document.addEventListener('DOMContentLoaded', () => {
     language: defaultLang,
     hideScrollbars: true,
     resetOnMediaChange: true,
-    expandVideos: false,
+    expandPreviewVideos: false,
+    expandPlayerVideos: false,
     keyboardZoomEnabled: true,
     kbdZoomIn: defaultKbdIn,
     kbdZoomOut: defaultKbdOut,
@@ -193,7 +197,8 @@ document.addEventListener('DOMContentLoaded', () => {
     keyboardPanStepVal.textContent = `${panStep}px`;
     toggleHideScrollbars.checked = items.hideScrollbars;
     toggleResetOnMediaChange.checked = items.resetOnMediaChange;
-    toggleExpandVideos.checked = Boolean(items.expandVideos);
+    toggleExpandPreviewVideos.checked = items.expandPreviewVideos !== undefined ? items.expandPreviewVideos : Boolean(items.expandVideos);
+    toggleExpandPlayerVideos.checked = Boolean(items.expandPlayerVideos);
     toggleKeyboardZoom.checked = items.keyboardZoomEnabled;
     kbdBindings.style.display = items.keyboardZoomEnabled ? 'grid' : 'none';
     bindings.in.combo = items.kbdZoomIn || defaultKbdIn;
@@ -247,8 +252,15 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.sync.set({ resetOnMediaChange: toggleResetOnMediaChange.checked });
   });
 
-  toggleExpandVideos.addEventListener('change', () => {
-    chrome.storage.sync.set({ expandVideos: toggleExpandVideos.checked });
+  toggleExpandPreviewVideos.addEventListener('change', () => {
+    chrome.storage.sync.set({
+      expandPreviewVideos: toggleExpandPreviewVideos.checked,
+      expandVideos: toggleExpandPreviewVideos.checked
+    });
+  });
+
+  toggleExpandPlayerVideos.addEventListener('change', () => {
+    chrome.storage.sync.set({ expandPlayerVideos: toggleExpandPlayerVideos.checked });
   });
 
   toggleKeyboardZoom.addEventListener('change', () => {

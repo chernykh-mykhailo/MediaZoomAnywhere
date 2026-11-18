@@ -18,7 +18,8 @@
     keyboardPanModifier: 'shift',
     keyboardPanStep: 200,
     resetOnMediaChange: true,
-    expandVideos: false
+    expandPreviewVideos: false,
+    expandPlayerVideos: false
   };
 
   // Check support for individual transform properties (Chrome 104+)
@@ -38,7 +39,7 @@
       'enabled', 'modifierKey', 'zoomSpeed', 'maxZoom',
       'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut',
       'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier', 'keyboardPanStep',
-      'resetOnMediaChange', 'expandVideos'
+      'resetOnMediaChange', 'expandVideos', 'expandPreviewVideos', 'expandPlayerVideos'
     ], (items) => {
       if (items.enabled !== undefined) config.enabled = items.enabled;
       if (items.modifierKey) config.modifierKey = items.modifierKey;
@@ -54,7 +55,12 @@
       if (items.keyboardPanModifier) config.keyboardPanModifier = items.keyboardPanModifier;
       if (items.keyboardPanStep !== undefined) config.keyboardPanStep = Number(items.keyboardPanStep);
       if (items.resetOnMediaChange !== undefined) config.resetOnMediaChange = items.resetOnMediaChange;
-      if (items.expandVideos !== undefined) config.expandVideos = items.expandVideos;
+      if (items.expandPreviewVideos !== undefined) {
+        config.expandPreviewVideos = items.expandPreviewVideos;
+      } else if (items.expandVideos !== undefined) {
+        config.expandPreviewVideos = items.expandVideos;
+      }
+      if (items.expandPlayerVideos !== undefined) config.expandPlayerVideos = items.expandPlayerVideos;
     });
 
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -76,7 +82,9 @@
         if (changes.keyboardPanModifier) config.keyboardPanModifier = changes.keyboardPanModifier.newValue;
         if (changes.keyboardPanStep) config.keyboardPanStep = Number(changes.keyboardPanStep.newValue);
         if (changes.resetOnMediaChange) config.resetOnMediaChange = changes.resetOnMediaChange.newValue;
-        if (changes.expandVideos) config.expandVideos = changes.expandVideos.newValue;
+        if (changes.expandPreviewVideos) config.expandPreviewVideos = changes.expandPreviewVideos.newValue;
+        if (changes.expandVideos && !changes.expandPreviewVideos) config.expandPreviewVideos = changes.expandVideos.newValue;
+        if (changes.expandPlayerVideos) config.expandPlayerVideos = changes.expandPlayerVideos.newValue;
       }
     });
   }
@@ -1425,9 +1433,22 @@
       const inModal = Boolean(targetMedia.closest('[role="dialog"], [aria-modal="true"], dialog[open], .modal, .lightbox, .pswp, .viewer, [class*="viewer"], [class*="lightbox"], [class*="modal"]'));
       const isFullscreen = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
       const isPreviewVideo = isVideo && isPreviewThumbnailVideo(targetMedia);
-      // Images expand by default; videos ONLY expand if they are feed preview thumbnails and expandVideos is on.
-      // Standalone/main players (youtube.com/watch, shorts, etc.) NEVER expand outside their container so controls stay visible!
-      const shouldExpand = (!isVideo || (config.expandVideos && isPreviewVideo)) && !inModal && !isFullscreen;
+      const isPlayerVideo = isVideo && !isPreviewVideo;
+
+      // Expand condition:
+      // - Images expand by default
+      // - Feed/card preview videos expand if expandPreviewVideos is enabled
+      // - Standalone/main player videos expand if expandPlayerVideos is enabled
+      let shouldExpand = false;
+      if (!inModal && !isFullscreen) {
+        if (!isVideo) {
+          shouldExpand = true;
+        } else if (isPreviewVideo && config.expandPreviewVideos) {
+          shouldExpand = true;
+        } else if (isPlayerVideo && config.expandPlayerVideos) {
+          shouldExpand = true;
+        }
+      }
       const computed = window.getComputedStyle(targetMedia);
       if (computed.position === 'static') {
         targetMedia.style.position = 'relative';
