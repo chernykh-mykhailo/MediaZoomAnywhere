@@ -285,10 +285,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (items.hideScrollbars !== undefined) toggleHideScrollbars.checked = items.hideScrollbars;
     if (items.resetOnMediaChange !== undefined) toggleResetOnMediaChange.checked = items.resetOnMediaChange;
-    if (items.expandPreviewVideos !== undefined) {
-      toggleExpandPreviewVideos.checked = items.expandPreviewVideos;
-    } else if (items.expandVideos !== undefined) {
-      toggleExpandPreviewVideos.checked = items.expandVideos;
+    // Feature temporarily disabled & hidden (see TODO.md)
+    if (toggleExpandPreviewVideos) {
+      toggleExpandPreviewVideos.checked = false;
+      if (items.expandPreviewVideos || items.expandVideos) {
+        safeSave({ expandPreviewVideos: false, expandVideos: false });
+      }
     }
     if (items.expandPlayerVideos !== undefined) toggleExpandPlayerVideos.checked = Boolean(items.expandPlayerVideos);
     if (items.keyboardZoomEnabled !== undefined) {

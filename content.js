@@ -54,11 +54,8 @@
     if (items.customPanModifier) config.customPanModifier = items.customPanModifier;
     if (items.keyboardPanStep !== undefined) config.keyboardPanStep = Number(items.keyboardPanStep);
     if (items.resetOnMediaChange !== undefined) config.resetOnMediaChange = items.resetOnMediaChange;
-    if (items.expandPreviewVideos !== undefined) {
-      config.expandPreviewVideos = items.expandPreviewVideos;
-    } else if (items.expandVideos !== undefined) {
-      config.expandPreviewVideos = items.expandVideos;
-    }
+    // Feed preview expansion is temporarily disabled (see TODO.md)
+    config.expandPreviewVideos = false;
     if (items.expandPlayerVideos !== undefined) config.expandPlayerVideos = items.expandPlayerVideos;
   };
 
@@ -106,8 +103,7 @@
         if (changes.customPanModifier) config.customPanModifier = changes.customPanModifier.newValue;
         if (changes.keyboardPanStep) config.keyboardPanStep = Number(changes.keyboardPanStep.newValue);
         if (changes.resetOnMediaChange) config.resetOnMediaChange = changes.resetOnMediaChange.newValue;
-        if (changes.expandPreviewVideos) config.expandPreviewVideos = changes.expandPreviewVideos.newValue;
-        if (changes.expandVideos && !changes.expandPreviewVideos) config.expandPreviewVideos = changes.expandVideos.newValue;
+        config.expandPreviewVideos = false;
         if (changes.expandPlayerVideos) config.expandPlayerVideos = changes.expandPlayerVideos.newValue;
       }
     });
@@ -1367,9 +1363,17 @@
     const y = e.clientY;
 
     // 0. Active element lock during continuous zooming:
-    // When an element is already active and zoomed (> 1.0), KEEP ZOOMING IT!
-    // Never switch targets or bounce between <img> and <video> mid-zoom!
+    // When an element is already active and zoomed (> 1.0), keep zooming it, UNLESS
+    // a static thumbnail image was locked before the hover video preview finished loading!
     if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected) {
+      if (window.location.hostname.includes('youtube.com') && activeElement.tagName && activeElement.tagName.toLowerCase() === 'img') {
+        const activeVid = findActiveVideoAtPoint(x, y);
+        if (activeVid && (!activeVid.paused || activeVid.currentTime > 0)) {
+          resetZoom(activeElement);
+          return activeVid;
+        }
+      }
+
       if (isPointInRect(activeState.origRect, x, y, 250) || isWheelOverActiveMedia(e) || isPointInsidePlayerOf(activeElement, x, y) || isCursorNearElement(activeElement, x, y, 200)) {
         return activeElement;
       }
