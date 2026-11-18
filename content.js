@@ -1247,6 +1247,16 @@
       }
     }
 
+    if (activeState && activeState.elevatedControls) {
+      for (const item of activeState.elevatedControls) {
+        if (item.prevZIndex) {
+          item.el.style.setProperty('z-index', item.prevZIndex, item.prevZIndexPriority || '');
+        } else {
+          item.el.style.removeProperty('z-index');
+        }
+      }
+    }
+
     if (badgeEl) {
       badgeEl.classList.remove('mza-visible');
     }
@@ -1270,6 +1280,11 @@
   function hasMediaSwitchedAway(el) {
     if (!el || !el.isConnected || !isVisible(el)) return true;
     if (el.closest && el.closest('[aria-hidden="true"], [inert]')) return true;
+
+    // For videos: an active playing video never switches away unless detached or hidden
+    if (el.tagName && el.tagName.toLowerCase() === 'video') {
+      return false;
+    }
 
     const fs = document.fullscreenElement || document.webkitFullscreenElement;
     if (fs && (fs === el || isDescendantOrSelf(el, fs))) {
@@ -1333,15 +1348,20 @@
       childList: true
     });
 
-    let ancestor = el.parentElement;
-    let depth = 0;
-    while (ancestor && ancestor !== document.body && ancestor !== document.documentElement && depth < 4) {
-      mediaObserver.observe(ancestor, {
-        attributes: true,
-        attributeFilter: ['style', 'class', 'hidden', 'aria-hidden', 'inert']
-      });
-      ancestor = ancestor.parentElement;
-      depth++;
+    // Only observe ancestor style/class for non-video elements (e.g. image carousel slides).
+    // Videos constantly mutate player classes (like .ytp-autohide) which must not trigger zoom resets!
+    const isVideo = el.tagName && el.tagName.toLowerCase() === 'video';
+    if (!isVideo) {
+      let ancestor = el.parentElement;
+      let depth = 0;
+      while (ancestor && ancestor !== document.body && ancestor !== document.documentElement && depth < 4) {
+        mediaObserver.observe(ancestor, {
+          attributes: true,
+          attributeFilter: ['style', 'class', 'hidden', 'aria-hidden', 'inert']
+        });
+        ancestor = ancestor.parentElement;
+        depth++;
+      }
     }
   }
 
@@ -1426,7 +1446,8 @@
         origCenterY: initRect.top + initRect.height / 2,
         baseTransform: baseTransform,
         originalStyles: saveOriginalStyles(targetMedia),
-        overflowParents: []
+        overflowParents: [],
+        elevatedControls: []
       };
 
       const isVideo = targetMedia.tagName && targetMedia.tagName.toLowerCase() === 'video';
@@ -1472,7 +1493,14 @@
           const modY = !isScrollableY && (pStyle.overflowY === 'hidden' || pStyle.overflowY === 'clip');
           const modContain = Boolean(pStyle.contain && pStyle.contain !== 'none');
           const modClip = Boolean(pStyle.clipPath && pStyle.clipPath !== 'none');
-          const modZ = true;
+
+          // DO NOT elevate z-index on inner video wrappers (.html5-video-container),
+          // otherwise it covers the player controls (.ytp-chrome-bottom) which are siblings inside #movie_player!
+          const isInnerVideoWrapper = isVideo && (
+            p.classList.contains('html5-video-container') ||
+            (pStyle.position === 'absolute' && p.parentElement && (p.parentElement.id === 'movie_player' || p.parentElement.classList.contains('html5-video-player')))
+          );
+          const modZ = !isInnerVideoWrapper;
 
           activeState.overflowParents.push({
             el: p,
@@ -1499,8 +1527,23 @@
           if (modY) p.style.setProperty('overflow-y', 'visible', 'important');
           if (modContain) p.style.setProperty('contain', 'none', 'important');
           if (modClip) p.style.setProperty('clip-path', 'none', 'important');
-          if (pStyle.position === 'static') p.style.setProperty('position', 'relative', 'important');
-          p.style.setProperty('z-index', '2147483640', 'important');
+          if (modZ) {
+            if (pStyle.position === 'static') p.style.setProperty('position', 'relative', 'important');
+            p.style.setProperty('z-index', '2147483640', 'important');
+          }
+
+          // If this is a video player, elevate its control bars above the zoomed video
+          if (isVideo && (p.id === 'movie_player' || p.classList.contains('html5-video-player'))) {
+            const playerBars = p.querySelectorAll('.ytp-chrome-bottom, .ytp-gradient-bottom, .ytp-chrome-top');
+            for (const bar of playerBars) {
+              activeState.elevatedControls.push({
+                el: bar,
+                prevZIndex: bar.style.zIndex,
+                prevZIndexPriority: bar.style.getPropertyPriority('z-index')
+              });
+              bar.style.setProperty('z-index', bar.classList.contains('ytp-chrome-bottom') ? '2147483645' : '2147483644', 'important');
+            }
+          }
 
           p = p.parentElement;
           depth++;
