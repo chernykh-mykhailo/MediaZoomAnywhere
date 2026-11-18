@@ -109,6 +109,7 @@
   let lastMouseX = -1;
   let lastMouseY = -1;
   const heldKeyCodes = new Set();
+  let isRightClickHeld = false;
   let lastRightClickZoomTime = 0;
   let wasZoomedWithRightClick = false;
   let wasZoomedWithSideButton = false;
@@ -159,7 +160,7 @@
     if (config.modifierKey === 'custom' && config.customActivationKey) {
       const c = config.customActivationKey;
       if (c.code === 'MouseRight') {
-        const isDown = (e.buttons & 2) !== 0;
+        const isDown = isRightClickHeld || (e.buttons & 2) !== 0;
         if (isDown) {
           wasZoomedWithRightClick = true;
           lastRightClickZoomTime = Date.now();
@@ -1151,63 +1152,43 @@
   function findTargetMedia(e) {
     const x = e.clientX;
     const y = e.clientY;
-    const openModal = getOpenModalViewer();
 
-    // 1. If currently zoomed in, keep active element unless a modal opened over it or user explicitly points at another large media
-    if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected && isVisible(activeElement) && getVisibleClippedRect(activeElement)) {
-      if (openModal) {
-        return isDescendantOrSelf(activeElement, openModal.viewer) ? activeElement : openModal.media;
-      }
-
-      // If activeElement is an image, but a preview video started playing in the card, switch to the video!
-      if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'img') {
-        const parentCard = activeElement.closest('ytd-thumbnail, ytd-moving-thumbnail-renderer, [class*="thumbnail"], [class*="video-card"]');
-        if (parentCard) {
-          const activeVid = parentCard.querySelector('video');
-          if (activeVid && isVisible(activeVid)) {
-            return activeVid;
-          }
-        }
-      }
-
-      if (isCursorNearElement(activeElement, x, y, 160) || isPointInsidePlayerOf(activeElement, x, y)) {
-        return activeElement;
-      }
-
-      const otherDistinctMedia = findDirectMediaAtPoint(x, y, e, { minSize: 150, exclude: activeElement });
-      if (!otherDistinctMedia) {
-        return activeElement;
-      }
-    }
-
-    // 2. OPEN MODAL / LIGHTBOX / DIALOG / FULLSCREEN:
-    // Always prioritize the clearly open media in the active modal/viewer over anything behind or under the cursor!
-    if (openModal && openModal.media) {
-      return resolveMediaNode(openModal.media);
-    }
-
-    // 3. Direct media under cursor (video > img > canvas > background-image)
+    // 1. Direct media under cursor (always top priority when hovering an image/video/canvas)
     const directMedia = findDirectMediaAtPoint(x, y, e);
-    const primaryPlayer = getVisiblePrimaryPlayer();
-
     if (directMedia) {
-      const isDirectVideo = directMedia.tagName && directMedia.tagName.toLowerCase() === 'video';
-      if (!isDirectVideo && primaryPlayer) {
-        const dRect = getVisibleClippedRect(directMedia);
-        const pRect = getVisibleClippedRect(primaryPlayer);
-        if (
-          dRect && pRect &&
-          pRect.width >= 420 && pRect.height >= 240 &&
-          (dRect.width < 220 || dRect.height < 160) &&
-          pRect.area >= dRect.area * 4
-        ) {
-          return primaryPlayer;
+      // If currently active and zoomed, keep activeElement if it matches or if it's a card's active preview video
+      if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected) {
+        if (activeElement === directMedia) {
+          return activeElement;
+        }
+        // If an image was zoomed, but a hover video started playing in the same card, switch to video
+        if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'img') {
+          const parentCard = activeElement.closest('ytd-thumbnail, ytd-moving-thumbnail-renderer, [class*="thumbnail"], [class*="video-card"]');
+          if (parentCard) {
+            const activeVid = parentCard.querySelector('video');
+            if (activeVid && isVisible(activeVid) && (activeVid === directMedia || isDescendantOrSelf(directMedia, parentCard))) {
+              return activeVid;
+            }
+          }
         }
       }
       return directMedia;
     }
 
-    // 4. Inline viewer / player container directly under cursor (e.g. cursor on viewer margin/controls)
+    // 2. Currently active zoomed element (keep focus if cursor is near it or within its player)
+    if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected && isVisible(activeElement) && getVisibleClippedRect(activeElement)) {
+      if (isCursorNearElement(activeElement, x, y, 160) || isPointInsidePlayerOf(activeElement, x, y)) {
+        return activeElement;
+      }
+    }
+
+    // 3. Open modal / lightbox / viewer (prioritize if cursor is inside or near it)
+    const openModal = getOpenModalViewer();
+    if (openModal && openModal.media) {
+      return resolveMediaNode(openModal.media);
+    }
+
+    // 4. Inline viewer / player container directly under cursor
     const inlineViewer = getActiveViewer(x, y);
     if (inlineViewer) {
       const viewerMedia = findLargestMedia(inlineViewer);
@@ -1222,7 +1203,8 @@
       return focusedMedia;
     }
 
-    // 6. Visible primary video player (e.g. #movie_player when cursor is outside media)
+    // 6. Visible primary video player
+    const primaryPlayer = getVisiblePrimaryPlayer();
     if (primaryPlayer) {
       return primaryPlayer;
     }
@@ -2005,6 +1987,7 @@
   function onWindowBlur() {
     isDragging = false;
     hasDragged = false;
+    isRightClickHeld = false;
     pointerDownInPlayer = false;
     heldKeyCodes.clear();
     blockedKeyCodes.clear();
@@ -2062,8 +2045,9 @@
   document.addEventListener('keyup', onKeyUpOrPress, { capture: true });
   function blockContextMenu(e) {
     const isCustomRight = config.modifierKey === 'custom' && config.customActivationKey && config.customActivationKey.code === 'MouseRight';
-    const wasRecentlyZoomed = wasZoomedWithRightClick || (Date.now() - lastRightClickZoomTime < 1200);
-    const isOverMedia = Boolean(activeElement || (lastMouseX >= 0 && lastMouseY >= 0 && findTargetMedia({ clientX: lastMouseX, clientY: lastMouseY })) || isEventOnActiveMedia(e));
+    const wasRecentlyZoomed = wasZoomedWithRightClick || (Date.now() - lastRightClickZoomTime < 1500);
+    const mediaAtPoint = findDirectMediaAtPoint(e.clientX, e.clientY, e);
+    const isOverMedia = Boolean(activeElement || mediaAtPoint || isEventOnActiveMedia(e));
 
     if (wasRecentlyZoomed || (isCustomRight && isOverMedia)) {
       e.preventDefault();
@@ -2079,11 +2063,26 @@
     }
   }
 
+  function onRightMouseDown(e) {
+    if (e.button === 2) {
+      isRightClickHeld = true;
+      if (config.modifierKey === 'custom' && config.customActivationKey && config.customActivationKey.code === 'MouseRight') {
+        const isOverMedia = Boolean(activeElement || findDirectMediaAtPoint(e.clientX, e.clientY, e));
+        if (isOverMedia) {
+          e.preventDefault();
+        }
+      }
+    }
+  }
+
   function onRightMouseUp(e) {
+    if (e.button === 2 || !(e.buttons & 2)) {
+      isRightClickHeld = false;
+    }
     if (e.button === 2) {
       const isCustomRight = config.modifierKey === 'custom' && config.customActivationKey && config.customActivationKey.code === 'MouseRight';
-      const wasRecentlyZoomed = wasZoomedWithRightClick || (Date.now() - lastRightClickZoomTime < 1200);
-      const isOverMedia = Boolean(activeElement || (lastMouseX >= 0 && lastMouseY >= 0 && findTargetMedia({ clientX: lastMouseX, clientY: lastMouseY })) || isEventOnActiveMedia(e));
+      const wasRecentlyZoomed = wasZoomedWithRightClick || (Date.now() - lastRightClickZoomTime < 1500);
+      const isOverMedia = Boolean(activeElement || findDirectMediaAtPoint(e.clientX, e.clientY, e) || isEventOnActiveMedia(e));
       if (wasRecentlyZoomed || (isCustomRight && isOverMedia)) {
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -2094,6 +2093,8 @@
     }
   }
 
+  window.addEventListener('pointerdown', onRightMouseDown, { capture: true });
+  window.addEventListener('mousedown', onRightMouseDown, { capture: true });
   window.addEventListener('contextmenu', blockContextMenu, { capture: true });
   document.addEventListener('contextmenu', blockContextMenu, { capture: true });
   window.addEventListener('pointerup', onRightMouseUp, { capture: true });
