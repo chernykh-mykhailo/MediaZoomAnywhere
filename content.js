@@ -1498,13 +1498,12 @@
   }
 
   function applyTransform(el, scale, panX, panY) {
-    if (supportsIndependentTransforms) {
-      el.style.setProperty('scale', `${scale.toFixed(3)}`, 'important');
-      el.style.setProperty('translate', `${panX.toFixed(2)}px ${panY.toFixed(2)}px`, 'important');
-    } else {
-      const base = activeState && activeState.baseTransform ? `${activeState.baseTransform} ` : '';
-      el.style.setProperty('transform', `${base}translate(${panX.toFixed(2)}px, ${panY.toFixed(2)}px) scale(${scale.toFixed(3)})`, 'important');
-    }
+    const base = activeState && activeState.baseTransform ? `${activeState.baseTransform} ` : '';
+    const transformVal = `${base}translate(${panX.toFixed(2)}px, ${panY.toFixed(2)}px) scale(${scale.toFixed(3)})`;
+    el.style.setProperty('transform', transformVal, 'important');
+    el.style.setProperty('transform-origin', 'center center', 'important');
+    el.style.removeProperty('scale');
+    el.style.removeProperty('translate');
   }
 
   function hasMediaSwitchedAway(el) {
@@ -1665,7 +1664,7 @@
 
       const currentTransform = targetMedia.style.transform || '';
       let baseTransform = '';
-      if (!supportsIndependentTransforms && currentTransform) {
+      if (currentTransform && !currentTransform.includes('scale(') && !currentTransform.includes('translate(')) {
         baseTransform = currentTransform;
       }
 
