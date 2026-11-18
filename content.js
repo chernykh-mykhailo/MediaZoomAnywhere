@@ -20,7 +20,7 @@
     customPanModifier: { ctrl: true, alt: false, shift: true, meta: false, code: '', key: '' },
     keyboardPanStep: 200,
     resetOnMediaChange: true,
-    expandPreviewVideos: true,
+    expandPreviewVideos: false,
     expandPlayerVideos: false
   };
 
@@ -1320,7 +1320,7 @@
     // When an element is already active and zoomed (> 1.0), KEEP ZOOMING IT!
     // Never switch targets or bounce between <img> and <video> mid-zoom!
     if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected) {
-      if (isCursorNearElement(activeElement, x, y, 200) || isPointInsidePlayerOf(activeElement, x, y) || isWheelOverActiveMedia(e)) {
+      if (isPointInRect(activeState.origRect, x, y, 250) || isWheelOverActiveMedia(e) || isPointInsidePlayerOf(activeElement, x, y) || isCursorNearElement(activeElement, x, y, 200)) {
         return activeElement;
       }
     }
@@ -1392,7 +1392,8 @@
       transformOrigin: el.style.transformOrigin,
       zIndex: el.style.zIndex,
       position: el.style.position,
-      pointerEvents: el.style.pointerEvents
+      pointerEvents: el.style.pointerEvents,
+      willChange: el.style.willChange
     };
   }
 
@@ -1418,6 +1419,7 @@
       target.style.zIndex = orig.zIndex || '';
       target.style.position = orig.position || '';
       target.style.pointerEvents = orig.pointerEvents || '';
+      target.style.willChange = orig.willChange || '';
     } else {
       target.style.scale = '';
       target.style.translate = '';
@@ -1426,6 +1428,7 @@
       target.style.zIndex = '';
       target.style.position = '';
       target.style.pointerEvents = '';
+      target.style.willChange = '';
     }
 
     // Restore overflow on parents using setProperty / removeProperty with priority
@@ -1705,13 +1708,14 @@
       if (computed.position === 'static') {
         targetMedia.style.position = 'relative';
       }
-      // Elevate zIndex for images and feed preview videos (so preview video renders above card overlays/badges)
-      if (shouldExpand && (!isVideo || isPreviewVideo)) {
+      // Elevate zIndex ONLY for images (never for <video>, to avoid breaking player controls or hover preview scrims)
+      if (shouldExpand && !isVideo) {
         targetMedia.style.zIndex = '2147483646';
       }
       if (shouldExpand && !isVideo) {
         targetMedia.style.pointerEvents = 'auto';
       }
+      targetMedia.style.willChange = 'transform';
       targetMedia.classList.add('mza-zoomed');
 
       // Lift overflow:hidden and containment on direct container parents for inline thumbnails and expanded videos
@@ -1732,10 +1736,12 @@
           const modContain = Boolean(pStyle.contain && pStyle.contain !== 'none');
           const modClip = Boolean(pStyle.clipPath && pStyle.clipPath !== 'none');
 
-          // DO NOT elevate z-index on inner video wrappers of main player (.html5-video-container),
-          // otherwise it covers the player controls (.ytp-chrome-bottom) which are siblings inside #movie_player!
-          const isInnerVideoWrapper = isVideo && !isPreviewVideo && (
+          // DO NOT elevate z-index on inner video wrappers (.html5-video-container),
+          // otherwise it covers the player controls (.ytp-chrome-bottom) or hover scrims!
+          const isInnerVideoWrapper = isVideo && (
             p.classList.contains('html5-video-container') ||
+            p.classList.contains('html5-video-player') ||
+            p.id === 'inline-preview-player' ||
             (pStyle.position === 'absolute' && p.parentElement && (p.parentElement.id === 'movie_player' || p.parentElement.classList.contains('html5-video-player')))
           );
           const modZ = !isInnerVideoWrapper;

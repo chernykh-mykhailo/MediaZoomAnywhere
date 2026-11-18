@@ -258,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
     language: defaultLang,
     hideScrollbars: true,
     resetOnMediaChange: true,
-    expandPreviewVideos: true,
+    expandPreviewVideos: false,
     expandPlayerVideos: false,
     keyboardZoomEnabled: true,
     kbdZoomIn: defaultKbdIn,
