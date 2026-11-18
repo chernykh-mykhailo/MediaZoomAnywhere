@@ -249,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const defaultLang = (navigator.language || 'en').toLowerCase().startsWith('uk') ? 'uk' : 'en';
 
-  chrome.storage.sync.get({
+  const defaultSettings = {
     enabled: true,
     modifierKey: 'ctrl',
     customActivationKey: defaultCustomActivationKey,
@@ -269,143 +269,188 @@ document.addEventListener('DOMContentLoaded', () => {
     keyboardPanModifier: 'shift',
     customPanModifier: defaultCustomPanModifier,
     keyboardPanStep: 200
-  }, (items) => {
-    toggleEnabled.checked = items.enabled;
-    modifierKey.value = items.modifierKey;
-    zoomSpeed.value = items.zoomSpeed;
-    zoomSpeedVal.textContent = `${Math.round((items.zoomSpeed - 1) * 100)}%`;
-    maxZoom.value = items.maxZoom;
-    maxZoomVal.textContent = `${items.maxZoom}x`;
-    toggleHideScrollbars.checked = items.hideScrollbars;
-    toggleResetOnMediaChange.checked = items.resetOnMediaChange;
-    toggleExpandPreviewVideos.checked = items.expandPreviewVideos !== undefined ? items.expandPreviewVideos : Boolean(items.expandVideos);
-    toggleExpandPlayerVideos.checked = Boolean(items.expandPlayerVideos);
-    toggleKeyboardZoom.checked = items.keyboardZoomEnabled;
-    kbdBindings.style.display = items.keyboardZoomEnabled ? 'grid' : 'none';
-    bindings.in.combo = items.kbdZoomIn || defaultKbdIn;
-    bindings.out.combo = items.kbdZoomOut || defaultKbdOut;
-    bindings.up.combo = items.kbdPanUp || defaultKbdPanUp;
-    bindings.down.combo = items.kbdPanDown || defaultKbdPanDown;
-    bindings.customActivation.combo = items.customActivationKey || defaultCustomActivationKey;
-    bindings.customPanModifier.combo = items.customPanModifier || defaultCustomPanModifier;
-    toggleKeyboardPan.checked = items.keyboardPanEnabled;
-    kbdPanOptions.style.display = items.keyboardPanEnabled ? 'block' : 'none';
-    kbdPanModifier.value = items.keyboardPanModifier || 'shift';
-    const panStep = Number(items.keyboardPanStep) || 200;
-    keyboardPanStep.value = panStep;
-    keyboardPanStepVal.textContent = `${panStep}px`;
+  };
+
+  function applyLoadedSettings(items) {
+    if (!items) return;
+    if (items.enabled !== undefined) toggleEnabled.checked = items.enabled;
+    if (items.modifierKey) modifierKey.value = items.modifierKey;
+    if (items.zoomSpeed) {
+      zoomSpeed.value = items.zoomSpeed;
+      zoomSpeedVal.textContent = `${Math.round((items.zoomSpeed - 1) * 100)}%`;
+    }
+    if (items.maxZoom) {
+      maxZoom.value = items.maxZoom;
+      maxZoomVal.textContent = `${items.maxZoom}x`;
+    }
+    if (items.hideScrollbars !== undefined) toggleHideScrollbars.checked = items.hideScrollbars;
+    if (items.resetOnMediaChange !== undefined) toggleResetOnMediaChange.checked = items.resetOnMediaChange;
+    if (items.expandPreviewVideos !== undefined) {
+      toggleExpandPreviewVideos.checked = items.expandPreviewVideos;
+    } else if (items.expandVideos !== undefined) {
+      toggleExpandPreviewVideos.checked = items.expandVideos;
+    }
+    if (items.expandPlayerVideos !== undefined) toggleExpandPlayerVideos.checked = Boolean(items.expandPlayerVideos);
+    if (items.keyboardZoomEnabled !== undefined) {
+      toggleKeyboardZoom.checked = items.keyboardZoomEnabled;
+      kbdBindings.style.display = items.keyboardZoomEnabled ? 'grid' : 'none';
+    }
+    if (items.kbdZoomIn) bindings.in.combo = items.kbdZoomIn;
+    if (items.kbdZoomOut) bindings.out.combo = items.kbdZoomOut;
+    if (items.kbdPanUp) bindings.up.combo = items.kbdPanUp;
+    if (items.kbdPanDown) bindings.down.combo = items.kbdPanDown;
+    if (items.customActivationKey) bindings.customActivation.combo = items.customActivationKey;
+    if (items.customPanModifier) bindings.customPanModifier.combo = items.customPanModifier;
+    if (items.keyboardPanEnabled !== undefined) {
+      toggleKeyboardPan.checked = items.keyboardPanEnabled;
+      kbdPanOptions.style.display = items.keyboardPanEnabled ? 'block' : 'none';
+    }
+    if (items.keyboardPanModifier) kbdPanModifier.value = items.keyboardPanModifier;
+    if (items.keyboardPanStep !== undefined) {
+      const panStep = Number(items.keyboardPanStep) || 200;
+      keyboardPanStep.value = panStep;
+      keyboardPanStepVal.textContent = `${panStep}px`;
+    }
     updateCustomRowsVisibility();
     updateBindingButtons();
-    applyLanguage(items.language);
-  });
+    if (items.language) applyLanguage(items.language);
+  }
 
-  const saveTimers = {};
+  // Load from local storage first (instant), then sync
+  if (chrome.storage.local) {
+    chrome.storage.local.get(defaultSettings, (localItems) => {
+      applyLoadedSettings(localItems);
+      if (chrome.storage.sync) {
+        try {
+          chrome.storage.sync.get(defaultSettings, (syncItems) => {
+            if (!chrome.runtime.lastError && syncItems) {
+              applyLoadedSettings(syncItems);
+            }
+          });
+        } catch (e) {}
+      }
+    });
+  } else if (chrome.storage.sync) {
+    chrome.storage.sync.get(defaultSettings, (items) => {
+      applyLoadedSettings(items);
+    });
+  }
 
-  function safeSyncSet(items, delay = 0) {
-    const keys = Object.keys(items);
-    const timerKey = keys.join('_');
+  let syncTimer = null;
+  const pendingSync = {};
 
-    if (delay > 0) {
-      clearTimeout(saveTimers[timerKey]);
-      saveTimers[timerKey] = setTimeout(() => {
-        chrome.storage.sync.set(items, () => {
+  function safeSave(items, syncDelay = 500) {
+    // 1. Immediately save to local storage (no write quota limits)
+    try {
+      const p = chrome.storage.local.set(items);
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {});
+      }
+    } catch (e) {}
+
+    // 2. Debounce sync storage write to avoid MAX_WRITE_OPERATIONS_PER_MINUTE (120/min limit)
+    Object.assign(pendingSync, items);
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => {
+      const toSync = { ...pendingSync };
+      for (const k of Object.keys(pendingSync)) {
+        delete pendingSync[k];
+      }
+      try {
+        const syncPromise = chrome.storage.sync.set(toSync, () => {
           if (chrome.runtime.lastError) {
-            chrome.storage.local.set(items, () => {});
+            // Silently handled
           }
         });
-      }, delay);
-    } else {
-      clearTimeout(saveTimers[timerKey]);
-      chrome.storage.sync.set(items, () => {
-        if (chrome.runtime.lastError) {
-          chrome.storage.local.set(items, () => {});
+        if (syncPromise && typeof syncPromise.catch === 'function') {
+          syncPromise.catch(() => {});
         }
-      });
-    }
+      } catch (e) {}
+    }, syncDelay);
   }
 
   langToggle.addEventListener('click', () => {
     const nextLang = currentLang === 'en' ? 'uk' : 'en';
     applyLanguage(nextLang);
-    safeSyncSet({ language: nextLang });
+    safeSave({ language: nextLang });
   });
 
   toggleEnabled.addEventListener('change', () => {
-    safeSyncSet({ enabled: toggleEnabled.checked });
+    safeSave({ enabled: toggleEnabled.checked });
   });
 
   modifierKey.addEventListener('change', () => {
     updateCustomRowsVisibility();
-    safeSyncSet({ modifierKey: modifierKey.value });
+    safeSave({ modifierKey: modifierKey.value });
   });
 
   zoomSpeed.addEventListener('input', () => {
     const val = Number(zoomSpeed.value);
     zoomSpeedVal.textContent = `${Math.round((val - 1) * 100)}%`;
-    safeSyncSet({ zoomSpeed: val }, 250);
+    safeSave({ zoomSpeed: val }, 500);
   });
 
   zoomSpeed.addEventListener('change', () => {
     const val = Number(zoomSpeed.value);
-    safeSyncSet({ zoomSpeed: val }, 0);
+    safeSave({ zoomSpeed: val }, 200);
   });
 
   maxZoom.addEventListener('input', () => {
     const val = Number(maxZoom.value);
     maxZoomVal.textContent = `${val}x`;
-    safeSyncSet({ maxZoom: val }, 250);
+    safeSave({ maxZoom: val }, 500);
   });
 
   maxZoom.addEventListener('change', () => {
     const val = Number(maxZoom.value);
-    safeSyncSet({ maxZoom: val }, 0);
+    safeSave({ maxZoom: val }, 200);
   });
 
   toggleHideScrollbars.addEventListener('change', () => {
-    safeSyncSet({ hideScrollbars: toggleHideScrollbars.checked });
+    safeSave({ hideScrollbars: toggleHideScrollbars.checked });
   });
 
   toggleResetOnMediaChange.addEventListener('change', () => {
-    safeSyncSet({ resetOnMediaChange: toggleResetOnMediaChange.checked });
+    safeSave({ resetOnMediaChange: toggleResetOnMediaChange.checked });
   });
 
   toggleExpandPreviewVideos.addEventListener('change', () => {
-    safeSyncSet({
+    safeSave({
       expandPreviewVideos: toggleExpandPreviewVideos.checked,
       expandVideos: toggleExpandPreviewVideos.checked
     });
   });
 
   toggleExpandPlayerVideos.addEventListener('change', () => {
-    safeSyncSet({ expandPlayerVideos: toggleExpandPlayerVideos.checked });
+    safeSave({ expandPlayerVideos: toggleExpandPlayerVideos.checked });
   });
 
   toggleKeyboardZoom.addEventListener('change', () => {
     const enabled = toggleKeyboardZoom.checked;
     kbdBindings.style.display = enabled ? 'grid' : 'none';
-    safeSyncSet({ keyboardZoomEnabled: enabled });
+    safeSave({ keyboardZoomEnabled: enabled });
   });
 
   toggleKeyboardPan.addEventListener('change', () => {
     const enabled = toggleKeyboardPan.checked;
     kbdPanOptions.style.display = enabled ? 'block' : 'none';
-    safeSyncSet({ keyboardPanEnabled: enabled });
+    safeSave({ keyboardPanEnabled: enabled });
   });
 
   kbdPanModifier.addEventListener('change', () => {
     updateCustomRowsVisibility();
-    safeSyncSet({ keyboardPanModifier: kbdPanModifier.value });
+    safeSave({ keyboardPanModifier: kbdPanModifier.value });
   });
 
   keyboardPanStep.addEventListener('input', () => {
     const val = Number(keyboardPanStep.value);
     keyboardPanStepVal.textContent = `${val}px`;
-    safeSyncSet({ keyboardPanStep: val }, 250);
+    safeSave({ keyboardPanStep: val }, 500);
   });
 
   keyboardPanStep.addEventListener('change', () => {
     const val = Number(keyboardPanStep.value);
-    safeSyncSet({ keyboardPanStep: val }, 0);
+    safeSave({ keyboardPanStep: val }, 200);
   });
 
   function startRecording(target, btn) {
@@ -421,7 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const entry = bindings[recordingTarget];
     if (entry) {
       entry.combo = combo;
-      safeSyncSet({ [entry.storageKey]: combo }, 0);
+      safeSave({ [entry.storageKey]: combo }, 0);
     }
     recordingTarget = null;
     activeModifiers = null;

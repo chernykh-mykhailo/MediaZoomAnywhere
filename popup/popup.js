@@ -160,22 +160,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const defaultLang = (navigator.language || 'en').toLowerCase().startsWith('uk') ? 'uk' : 'en';
 
-  chrome.storage.sync.get({
+  const defaultSettings = {
     enabled: true,
     modifierKey: 'ctrl',
     customActivationKey: defaultCustomActivationKey,
     zoomSpeed: 1.35,
     maxZoom: 15,
     language: defaultLang
-  }, (items) => {
-    toggleEnabled.checked = items.enabled;
-    modifierKey.value = items.modifierKey;
+  };
+
+  function applyLoadedSettings(items) {
+    if (!items) return;
+    if (items.enabled !== undefined) toggleEnabled.checked = items.enabled;
+    if (items.modifierKey) modifierKey.value = items.modifierKey;
     if (items.customActivationKey) customActivationKey = items.customActivationKey;
-    zoomSpeed.value = items.zoomSpeed;
-    zoomSpeedVal.textContent = `${Math.round((items.zoomSpeed - 1) * 100)}%`;
+    if (items.zoomSpeed) {
+      const val = Number(items.zoomSpeed);
+      zoomSpeed.value = val;
+      zoomSpeedVal.textContent = `${Math.round((val - 1) * 100)}%`;
+    }
     updateCustomRow();
-    applyLanguage(items.language);
-  });
+    if (items.language) applyLanguage(items.language);
+  }
+
+  // Load from local storage first (instant), then sync
+  if (chrome.storage.local) {
+    chrome.storage.local.get(defaultSettings, (localItems) => {
+      applyLoadedSettings(localItems);
+      if (chrome.storage.sync) {
+        try {
+          chrome.storage.sync.get(defaultSettings, (syncItems) => {
+            if (!chrome.runtime.lastError && syncItems) {
+              applyLoadedSettings(syncItems);
+            }
+          });
+        } catch (e) {}
+      }
+    });
+  } else if (chrome.storage.sync) {
+    chrome.storage.sync.get(defaultSettings, (items) => {
+      applyLoadedSettings(items);
+    });
+  }
 
   // Listen for storage changes from Options page to keep popup in sync if both are open
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -198,44 +224,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  const saveTimers = {};
+  let syncTimer = null;
+  const pendingSync = {};
 
-  function safeSyncSet(items, delay = 0) {
-    const keys = Object.keys(items);
-    const timerKey = keys.join('_');
+  function safeSave(items, syncDelay = 500) {
+    // 1. Immediately save to local storage (no write quota limits)
+    try {
+      const p = chrome.storage.local.set(items);
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {});
+      }
+    } catch (e) {}
 
-    if (delay > 0) {
-      clearTimeout(saveTimers[timerKey]);
-      saveTimers[timerKey] = setTimeout(() => {
-        chrome.storage.sync.set(items, () => {
+    // 2. Debounce sync storage write to avoid MAX_WRITE_OPERATIONS_PER_MINUTE (120/min limit)
+    Object.assign(pendingSync, items);
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => {
+      const toSync = { ...pendingSync };
+      for (const k of Object.keys(pendingSync)) {
+        delete pendingSync[k];
+      }
+      try {
+        const syncPromise = chrome.storage.sync.set(toSync, () => {
           if (chrome.runtime.lastError) {
-            chrome.storage.local.set(items, () => {});
+            // Handled safely without bubbling error
           }
         });
-      }, delay);
-    } else {
-      clearTimeout(saveTimers[timerKey]);
-      chrome.storage.sync.set(items, () => {
-        if (chrome.runtime.lastError) {
-          chrome.storage.local.set(items, () => {});
+        if (syncPromise && typeof syncPromise.catch === 'function') {
+          syncPromise.catch(() => {});
         }
-      });
-    }
+      } catch (e) {}
+    }, syncDelay);
   }
 
   langToggle.addEventListener('click', () => {
     const nextLang = currentLang === 'en' ? 'uk' : 'en';
     applyLanguage(nextLang);
-    safeSyncSet({ language: nextLang });
+    safeSave({ language: nextLang });
   });
 
   toggleEnabled.addEventListener('change', () => {
-    safeSyncSet({ enabled: toggleEnabled.checked });
+    safeSave({ enabled: toggleEnabled.checked });
   });
 
   modifierKey.addEventListener('change', () => {
     updateCustomRow();
-    safeSyncSet({ modifierKey: modifierKey.value });
+    safeSave({ modifierKey: modifierKey.value });
   });
 
   function startRecording() {
@@ -248,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function finishRecording(combo) {
     if (!isRecording) return;
     customActivationKey = combo;
-    safeSyncSet({ customActivationKey: combo }, 0);
+    safeSave({ customActivationKey: combo }, 0);
     isRecording = false;
     activeModifiers = null;
     updateCustomRow();
@@ -373,11 +407,11 @@ document.addEventListener('DOMContentLoaded', () => {
   zoomSpeed.addEventListener('input', () => {
     const val = Number(zoomSpeed.value);
     zoomSpeedVal.textContent = `${Math.round((val - 1) * 100)}%`;
-    safeSyncSet({ zoomSpeed: val }, 250);
+    safeSave({ zoomSpeed: val }, 500);
   });
 
   zoomSpeed.addEventListener('change', () => {
     const val = Number(zoomSpeed.value);
-    safeSyncSet({ zoomSpeed: val }, 0);
+    safeSave({ zoomSpeed: val }, 200);
   });
 });

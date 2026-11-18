@@ -36,36 +36,54 @@
   }
 
   // Load saved settings
-  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get([
-      'enabled', 'modifierKey', 'customActivationKey', 'zoomSpeed', 'maxZoom',
-      'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut',
-      'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier', 'customPanModifier', 'keyboardPanStep',
-      'resetOnMediaChange', 'expandVideos', 'expandPreviewVideos', 'expandPlayerVideos'
-    ], (items) => {
-      if (items.enabled !== undefined) config.enabled = items.enabled;
-      if (items.modifierKey) config.modifierKey = items.modifierKey;
-      if (items.customActivationKey) config.customActivationKey = items.customActivationKey;
-      if (items.zoomSpeed) config.zoomSpeed = Number(items.zoomSpeed);
-      if (items.maxZoom) config.maxZoom = Number(items.maxZoom);
-      if (items.hideScrollbars !== undefined) config.hideScrollbars = items.hideScrollbars;
-      if (items.keyboardZoomEnabled !== undefined) config.keyboardZoomEnabled = items.keyboardZoomEnabled;
-      if (items.kbdZoomIn) config.kbdZoomIn = items.kbdZoomIn;
-      if (items.kbdZoomOut) config.kbdZoomOut = items.kbdZoomOut;
-      if (items.kbdPanUp) config.kbdPanUp = items.kbdPanUp;
-      if (items.kbdPanDown) config.kbdPanDown = items.kbdPanDown;
-      if (items.keyboardPanEnabled !== undefined) config.keyboardPanEnabled = items.keyboardPanEnabled;
-      if (items.keyboardPanModifier) config.keyboardPanModifier = items.keyboardPanModifier;
-      if (items.customPanModifier) config.customPanModifier = items.customPanModifier;
-      if (items.keyboardPanStep !== undefined) config.keyboardPanStep = Number(items.keyboardPanStep);
-      if (items.resetOnMediaChange !== undefined) config.resetOnMediaChange = items.resetOnMediaChange;
-      if (items.expandPreviewVideos !== undefined) {
-        config.expandPreviewVideos = items.expandPreviewVideos;
-      } else if (items.expandVideos !== undefined) {
-        config.expandPreviewVideos = items.expandVideos;
-      }
-      if (items.expandPlayerVideos !== undefined) config.expandPlayerVideos = items.expandPlayerVideos;
-    });
+  const applyStoredSettings = (items) => {
+    if (!items) return;
+    if (items.enabled !== undefined) config.enabled = items.enabled;
+    if (items.modifierKey) config.modifierKey = items.modifierKey;
+    if (items.customActivationKey) config.customActivationKey = items.customActivationKey;
+    if (items.zoomSpeed) config.zoomSpeed = Number(items.zoomSpeed);
+    if (items.maxZoom) config.maxZoom = Number(items.maxZoom);
+    if (items.hideScrollbars !== undefined) config.hideScrollbars = items.hideScrollbars;
+    if (items.keyboardZoomEnabled !== undefined) config.keyboardZoomEnabled = items.keyboardZoomEnabled;
+    if (items.kbdZoomIn) config.kbdZoomIn = items.kbdZoomIn;
+    if (items.kbdZoomOut) config.kbdZoomOut = items.kbdZoomOut;
+    if (items.kbdPanUp) config.kbdPanUp = items.kbdPanUp;
+    if (items.kbdPanDown) config.kbdPanDown = items.kbdPanDown;
+    if (items.keyboardPanEnabled !== undefined) config.keyboardPanEnabled = items.keyboardPanEnabled;
+    if (items.keyboardPanModifier) config.keyboardPanModifier = items.keyboardPanModifier;
+    if (items.customPanModifier) config.customPanModifier = items.customPanModifier;
+    if (items.keyboardPanStep !== undefined) config.keyboardPanStep = Number(items.keyboardPanStep);
+    if (items.resetOnMediaChange !== undefined) config.resetOnMediaChange = items.resetOnMediaChange;
+    if (items.expandPreviewVideos !== undefined) {
+      config.expandPreviewVideos = items.expandPreviewVideos;
+    } else if (items.expandVideos !== undefined) {
+      config.expandPreviewVideos = items.expandVideos;
+    }
+    if (items.expandPlayerVideos !== undefined) config.expandPlayerVideos = items.expandPlayerVideos;
+  };
+
+  const keysToRead = [
+    'enabled', 'modifierKey', 'customActivationKey', 'zoomSpeed', 'maxZoom',
+    'hideScrollbars', 'keyboardZoomEnabled', 'kbdZoomIn', 'kbdZoomOut',
+    'kbdPanUp', 'kbdPanDown', 'keyboardPanEnabled', 'keyboardPanModifier', 'customPanModifier', 'keyboardPanStep',
+    'resetOnMediaChange', 'expandVideos', 'expandPreviewVideos', 'expandPlayerVideos'
+  ];
+
+  if (typeof chrome !== 'undefined' && chrome.storage) {
+    if (chrome.storage.local) {
+      chrome.storage.local.get(keysToRead, (localItems) => {
+        applyStoredSettings(localItems);
+      });
+    }
+    if (chrome.storage.sync) {
+      try {
+        chrome.storage.sync.get(keysToRead, (syncItems) => {
+          if (!chrome.runtime.lastError && syncItems) {
+            applyStoredSettings(syncItems);
+          }
+        });
+      } catch (e) {}
+    }
 
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'sync' || area === 'local') {
@@ -781,7 +799,7 @@
 
   function isPointInsidePlayerOf(el, x, y) {
     if (!el || !el.isConnected) return false;
-    const player = el.closest('#movie_player, .html5-video-player, .video-container');
+    const player = el.closest('#movie_player, .html5-video-player, .video-container, ytd-video-preview, #inline-preview-player, ytd-thumbnail, ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-compact-video-renderer');
     if (!player) return false;
     const r = player.getBoundingClientRect();
     return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
@@ -872,14 +890,19 @@
       }
     }
 
-    // Explicit thumbnail preview containers in YouTube feeds/grids
+    // Explicit thumbnail preview containers in YouTube feeds/grids/home/channels
     if (
       videoEl.closest(
-        'ytd-moving-thumbnail-renderer, ytd-thumbnail, #inline-preview-player, ' +
-        'ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ' +
-        '[class*="moving-thumbnail"], [class*="thumbnail-preview"]'
+        'ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ' +
+        'ytd-compact-video-renderer, ytd-thumbnail, ytd-moving-thumbnail-renderer, ytd-video-preview, ' +
+        '#inline-preview-player, [class*="moving-thumbnail"], [class*="thumbnail-preview"], [class*="video-card"], [class*="preview"]'
       )
     ) {
+      return true;
+    }
+
+    // On YouTube, if not on /watch or /shorts or /embed, any video in browse/home/feed is a preview
+    if (window.location.hostname.includes('youtube.com') && !path.startsWith('/watch') && !path.startsWith('/shorts') && !path.startsWith('/embed')) {
       return true;
     }
 
@@ -1008,12 +1031,15 @@
     const elements = document.elementsFromPoint(x, y) || [];
     const path = (e && e.composedPath) ? e.composedPath() : [];
 
-    // Collect top visible layer elements before hitting an opaque non-media barrier
+    // Collect top visible layer elements before hitting an opaque barrier that does not contain media
     const topElements = [];
     for (const el of elements) {
       topElements.push(el);
       if (!isMediaNode(el) && !isWatermarkOrOverlay(el) && isOpaqueBackground(el)) {
-        break;
+        const hasMediaInside = el.querySelector('video, img, picture, canvas');
+        if (!hasMediaInside) {
+          break;
+        }
       }
     }
 
@@ -1153,22 +1179,44 @@
     const x = e.clientX;
     const y = e.clientY;
 
+    // 0. Active element lock during continuous zooming:
+    if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected) {
+      // If activeElement is a <video>, NEVER downgrade to underlying thumbnail during continuous zoom!
+      if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'video') {
+        if (isCursorNearElement(activeElement, x, y, 160) || isPointInsidePlayerOf(activeElement, x, y) || isWheelOverActiveMedia(e)) {
+          return activeElement;
+        }
+      }
+
+      // If activeElement is an <img>, check if a hover preview video spawned inside the same card/container
+      if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'img') {
+        const parentCard = activeElement.closest(
+          'ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ' +
+          'ytd-compact-video-renderer, ytd-thumbnail, ytd-moving-thumbnail-renderer, ytd-video-preview, ' +
+          '#inline-preview-player, [class*="thumbnail"], [class*="preview"], [class*="video-card"]'
+        );
+        if (parentCard) {
+          const activeVid = parentCard.querySelector('video');
+          if (activeVid && isVisible(activeVid) && (activeVid.readyState >= 1 || !activeVid.paused) && isCursorNearElement(activeVid, x, y, 100)) {
+            return activeVid;
+          }
+        }
+        if (isCursorNearElement(activeElement, x, y, 160) || isPointInRect(activeElement.getBoundingClientRect(), x, y)) {
+          return activeElement;
+        }
+      }
+    }
+
     // 1. Direct media under cursor (always top priority when hovering an image/video/canvas)
     const directMedia = findDirectMediaAtPoint(x, y, e);
     if (directMedia) {
-      // If currently active and zoomed, keep activeElement if it matches or if it's a card's active preview video
       if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected) {
         if (activeElement === directMedia) {
           return activeElement;
         }
-        // If an image was zoomed, but a hover video started playing in the same card, switch to video
-        if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'img') {
-          const parentCard = activeElement.closest('ytd-thumbnail, ytd-moving-thumbnail-renderer, [class*="thumbnail"], [class*="video-card"]');
-          if (parentCard) {
-            const activeVid = parentCard.querySelector('video');
-            if (activeVid && isVisible(activeVid) && (activeVid === directMedia || isDescendantOrSelf(directMedia, parentCard))) {
-              return activeVid;
-            }
+        if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'video') {
+          if (isCursorNearElement(activeElement, x, y, 160) || isPointInsidePlayerOf(activeElement, x, y) || isWheelOverActiveMedia(e)) {
+            return activeElement;
           }
         }
       }
