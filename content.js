@@ -659,6 +659,37 @@
     return bestVid;
   }
 
+  function getViewportCenterMedia() {
+    const vpW = window.innerWidth;
+    const vpH = window.innerHeight;
+    const cx = vpW / 2;
+    const cy = vpH / 2;
+
+    const centerEl = findDirectMediaAtPoint(cx, cy, null, { minSize: 100 });
+    if (centerEl) return centerEl;
+
+    const candidates = document.querySelectorAll('video, img, canvas');
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const el of candidates) {
+      if (!isVisible(el) || isWatermarkOrOverlay(el) || isSpacerOrTransparentShield(el)) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 120 || rect.height < 90) continue;
+      if (rect.right <= 10 || rect.bottom <= 10 || rect.left >= vpW - 10 || rect.top >= vpH - 10) continue;
+
+      const elCx = rect.left + rect.width / 2;
+      const elCy = rect.top + rect.height / 2;
+      const dist = Math.hypot(elCx - cx, elCy - cy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = el;
+      }
+    }
+
+    return best ? resolveMediaNode(best) : null;
+  }
+
   function getActiveViewer(x, y) {
     const openModal = getOpenModalViewer();
     if (openModal) return openModal.viewer;
@@ -1330,14 +1361,14 @@
       if (!isVideo && !inModal) {
         let p = targetMedia.parentElement;
         let depth = 0;
-        while (p && p !== document.body && p !== document.documentElement && depth < 8) {
+        while (p && p !== document.body && p !== document.documentElement && depth < 10) {
           const pStyle = window.getComputedStyle(p);
           const isScrollableY = (pStyle.overflowY === 'auto' || pStyle.overflowY === 'scroll') && p.scrollHeight > p.clientHeight;
           const isScrollableX = (pStyle.overflowX === 'auto' || pStyle.overflowX === 'scroll') && p.scrollWidth > p.clientWidth;
 
           const modX = !isScrollableX && (pStyle.overflowX === 'hidden' || pStyle.overflowX === 'clip');
           const modY = !isScrollableY && (pStyle.overflowY === 'hidden' || pStyle.overflowY === 'clip');
-          const modZ = depth < 6;
+          const modZ = true;
 
           if (modX || modY || modZ) {
             activeState.overflowParents.push({
@@ -1646,6 +1677,9 @@
         }
         if (!target && lastMouseX >= 0 && lastMouseY >= 0) {
           target = findTargetMedia({ clientX: lastMouseX, clientY: lastMouseY });
+        }
+        if (!target) {
+          target = getViewportCenterMedia();
         }
 
         if (target) {
