@@ -249,11 +249,6 @@
 
   function isVisible(el) {
     if (!el || !(el instanceof Element) || !el.isConnected) return false;
-    if (typeof el.checkVisibility === 'function') {
-      if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
-        return false;
-      }
-    }
     const rect = el.getBoundingClientRect();
     if (rect.width < 10 || rect.height < 10) return false;
     const style = window.getComputedStyle(el);
@@ -1174,6 +1169,67 @@
     return null;
   }
 
+  // Find any active, playing, or hover preview video overlapping the cursor
+  // (handles videos with pointer-events: none, overlay scrims, or dynamic players like YouTube #inline-preview-player)
+  function findActiveVideoAtPoint(x, y) {
+    const candidateVideos = new Set(document.querySelectorAll('video'));
+
+    // Check YouTube preview player containers (both light DOM and shadowRoot)
+    const previewContainers = document.querySelectorAll(
+      '#inline-preview-player, ytd-video-preview, ytd-moving-thumbnail-renderer, ytd-player, [id*="preview-player"]'
+    );
+    for (const container of previewContainers) {
+      if (container.shadowRoot) {
+        const shadowVid = container.shadowRoot.querySelector('video');
+        if (shadowVid) candidateVideos.add(shadowVid);
+      }
+      const vid = container.querySelector('video');
+      if (vid) candidateVideos.add(vid);
+    }
+
+    let bestVideo = null;
+    let bestScore = -1;
+
+    for (const vid of candidateVideos) {
+      if (!vid || !vid.isConnected) continue;
+
+      const rect = vid.getBoundingClientRect();
+      const style = window.getComputedStyle(vid);
+      if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) < 0.05) {
+        continue;
+      }
+
+      // Check if cursor is directly within the video bounds
+      let inBounds = (rect.width >= 30 && rect.height >= 30 && isPointInRect(rect, x, y, 15));
+
+      // Or inside the video player / preview container bounds
+      if (!inBounds) {
+        const player = vid.closest('#inline-preview-player, ytd-video-preview, .html5-video-player, ytd-moving-thumbnail-renderer, [class*="player"]');
+        if (player) {
+          const pRect = player.getBoundingClientRect();
+          if (pRect.width >= 30 && pRect.height >= 30 && isPointInRect(pRect, x, y, 15)) {
+            inBounds = true;
+          }
+        }
+      }
+
+      if (inBounds) {
+        let score = 10;
+        // Playing videos get top priority
+        if (!vid.paused || vid.currentTime > 0) score += 50;
+        if (vid.readyState >= 1) score += 20;
+        if (vid.closest('#inline-preview-player, ytd-video-preview, ytd-moving-thumbnail-renderer')) score += 30;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestVideo = vid;
+        }
+      }
+    }
+
+    return bestVideo;
+  }
+
   // Priority search for media
   function findTargetMedia(e) {
     const x = e.clientX;
@@ -1190,16 +1246,9 @@
 
       // If activeElement is an <img>, check if a hover preview video spawned inside the same card/container
       if (activeElement.tagName && activeElement.tagName.toLowerCase() === 'img') {
-        const parentCard = activeElement.closest(
-          'ytd-rich-item-renderer, ytd-rich-grid-media, ytd-video-renderer, ytd-grid-video-renderer, ' +
-          'ytd-compact-video-renderer, ytd-thumbnail, ytd-moving-thumbnail-renderer, ytd-video-preview, ' +
-          '#inline-preview-player, [class*="thumbnail"], [class*="preview"], [class*="video-card"]'
-        );
-        if (parentCard) {
-          const activeVid = parentCard.querySelector('video');
-          if (activeVid && isVisible(activeVid) && (activeVid.readyState >= 1 || !activeVid.paused) && isCursorNearElement(activeVid, x, y, 100)) {
-            return activeVid;
-          }
+        const activeVid = findActiveVideoAtPoint(x, y);
+        if (activeVid) {
+          return activeVid;
         }
         if (isCursorNearElement(activeElement, x, y, 160) || isPointInRect(activeElement.getBoundingClientRect(), x, y)) {
           return activeElement;
@@ -1207,7 +1256,15 @@
       }
     }
 
-    // 1. Direct media under cursor (always top priority when hovering an image/video/canvas)
+    // 1. ACTIVE VIDEO UNDER CURSOR:
+    // When hovering over an active/playing video or hover preview (e.g. YouTube feed card),
+    // always prioritize the video over any static background thumbnail or wrapper underneath!
+    const activeVideo = findActiveVideoAtPoint(x, y);
+    if (activeVideo) {
+      return activeVideo;
+    }
+
+    // 2. Direct media under cursor (always top priority when hovering an image/video/canvas)
     const directMedia = findDirectMediaAtPoint(x, y, e);
     if (directMedia) {
       if (activeElement && activeState && activeState.scale > 1.0 && activeElement.isConnected) {
@@ -1581,9 +1638,12 @@
       if (computed.position === 'static') {
         targetMedia.style.position = 'relative';
       }
-      // Elevate zIndex ONLY for images (never for <video>, so player controls/toolbars remain unobstructed)
-      if (shouldExpand && !isVideo) {
+      // Elevate zIndex for images and feed preview videos (so preview video renders above card overlays/badges)
+      if (shouldExpand && (!isVideo || isPreviewVideo)) {
         targetMedia.style.zIndex = '2147483646';
+      }
+      if (shouldExpand) {
+        targetMedia.style.pointerEvents = 'auto';
       }
       targetMedia.classList.add('mza-zoomed');
 
@@ -1601,9 +1661,9 @@
           const modContain = Boolean(pStyle.contain && pStyle.contain !== 'none');
           const modClip = Boolean(pStyle.clipPath && pStyle.clipPath !== 'none');
 
-          // DO NOT elevate z-index on inner video wrappers (.html5-video-container),
+          // DO NOT elevate z-index on inner video wrappers of main player (.html5-video-container),
           // otherwise it covers the player controls (.ytp-chrome-bottom) which are siblings inside #movie_player!
-          const isInnerVideoWrapper = isVideo && (
+          const isInnerVideoWrapper = isVideo && !isPreviewVideo && (
             p.classList.contains('html5-video-container') ||
             (pStyle.position === 'absolute' && p.parentElement && (p.parentElement.id === 'movie_player' || p.parentElement.classList.contains('html5-video-player')))
           );
