@@ -124,29 +124,64 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  const saveTimers = {};
+
+  function safeSyncSet(items, delay = 0) {
+    const keys = Object.keys(items);
+    const timerKey = keys.join('_');
+
+    if (delay > 0) {
+      clearTimeout(saveTimers[timerKey]);
+      saveTimers[timerKey] = setTimeout(() => {
+        chrome.storage.sync.set(items, () => {
+          if (chrome.runtime.lastError) {
+            chrome.storage.local.set(items, () => {});
+          }
+        });
+      }, delay);
+    } else {
+      clearTimeout(saveTimers[timerKey]);
+      chrome.storage.sync.set(items, () => {
+        if (chrome.runtime.lastError) {
+          chrome.storage.local.set(items, () => {});
+        }
+      });
+    }
+  }
+
   langToggle.addEventListener('click', () => {
     const nextLang = currentLang === 'en' ? 'uk' : 'en';
     applyLanguage(nextLang);
-    chrome.storage.sync.set({ language: nextLang });
+    safeSyncSet({ language: nextLang });
   });
 
   toggleEnabled.addEventListener('change', () => {
-    chrome.storage.sync.set({ enabled: toggleEnabled.checked });
+    safeSyncSet({ enabled: toggleEnabled.checked });
   });
 
   modifierKey.addEventListener('change', () => {
-    chrome.storage.sync.set({ modifierKey: modifierKey.value });
+    safeSyncSet({ modifierKey: modifierKey.value });
   });
 
   zoomSpeed.addEventListener('input', () => {
     const val = Number(zoomSpeed.value);
     zoomSpeedVal.textContent = `${Math.round((val - 1) * 100)}%`;
-    chrome.storage.sync.set({ zoomSpeed: val });
+    safeSyncSet({ zoomSpeed: val }, 250);
+  });
+
+  zoomSpeed.addEventListener('change', () => {
+    const val = Number(zoomSpeed.value);
+    safeSyncSet({ zoomSpeed: val }, 0);
   });
 
   maxZoom.addEventListener('input', () => {
     const val = Number(maxZoom.value);
     maxZoomVal.textContent = `${val}x`;
-    chrome.storage.sync.set({ maxZoom: val });
+    safeSyncSet({ maxZoom: val }, 250);
+  });
+
+  maxZoom.addEventListener('change', () => {
+    const val = Number(maxZoom.value);
+    safeSyncSet({ maxZoom: val }, 0);
   });
 });

@@ -246,71 +246,111 @@ document.addEventListener('DOMContentLoaded', () => {
     applyLanguage(items.language);
   });
 
+  const saveTimers = {};
+
+  function safeSyncSet(items, delay = 0) {
+    const keys = Object.keys(items);
+    const timerKey = keys.join('_');
+
+    if (delay > 0) {
+      clearTimeout(saveTimers[timerKey]);
+      saveTimers[timerKey] = setTimeout(() => {
+        chrome.storage.sync.set(items, () => {
+          if (chrome.runtime.lastError) {
+            chrome.storage.local.set(items, () => {});
+          }
+        });
+      }, delay);
+    } else {
+      clearTimeout(saveTimers[timerKey]);
+      chrome.storage.sync.set(items, () => {
+        if (chrome.runtime.lastError) {
+          chrome.storage.local.set(items, () => {});
+        }
+      });
+    }
+  }
+
   langToggle.addEventListener('click', () => {
     const nextLang = currentLang === 'en' ? 'uk' : 'en';
     applyLanguage(nextLang);
-    chrome.storage.sync.set({ language: nextLang });
+    safeSyncSet({ language: nextLang });
   });
 
   toggleEnabled.addEventListener('change', () => {
-    chrome.storage.sync.set({ enabled: toggleEnabled.checked });
+    safeSyncSet({ enabled: toggleEnabled.checked });
   });
 
   modifierKey.addEventListener('change', () => {
-    chrome.storage.sync.set({ modifierKey: modifierKey.value });
+    safeSyncSet({ modifierKey: modifierKey.value });
   });
 
   zoomSpeed.addEventListener('input', () => {
     const val = Number(zoomSpeed.value);
     zoomSpeedVal.textContent = `${Math.round((val - 1) * 100)}%`;
-    chrome.storage.sync.set({ zoomSpeed: val });
+    safeSyncSet({ zoomSpeed: val }, 250);
+  });
+
+  zoomSpeed.addEventListener('change', () => {
+    const val = Number(zoomSpeed.value);
+    safeSyncSet({ zoomSpeed: val }, 0);
   });
 
   maxZoom.addEventListener('input', () => {
     const val = Number(maxZoom.value);
     maxZoomVal.textContent = `${val}x`;
-    chrome.storage.sync.set({ maxZoom: val });
+    safeSyncSet({ maxZoom: val }, 250);
+  });
+
+  maxZoom.addEventListener('change', () => {
+    const val = Number(maxZoom.value);
+    safeSyncSet({ maxZoom: val }, 0);
   });
 
   toggleHideScrollbars.addEventListener('change', () => {
-    chrome.storage.sync.set({ hideScrollbars: toggleHideScrollbars.checked });
+    safeSyncSet({ hideScrollbars: toggleHideScrollbars.checked });
   });
 
   toggleResetOnMediaChange.addEventListener('change', () => {
-    chrome.storage.sync.set({ resetOnMediaChange: toggleResetOnMediaChange.checked });
+    safeSyncSet({ resetOnMediaChange: toggleResetOnMediaChange.checked });
   });
 
   toggleExpandPreviewVideos.addEventListener('change', () => {
-    chrome.storage.sync.set({
+    safeSyncSet({
       expandPreviewVideos: toggleExpandPreviewVideos.checked,
       expandVideos: toggleExpandPreviewVideos.checked
     });
   });
 
   toggleExpandPlayerVideos.addEventListener('change', () => {
-    chrome.storage.sync.set({ expandPlayerVideos: toggleExpandPlayerVideos.checked });
+    safeSyncSet({ expandPlayerVideos: toggleExpandPlayerVideos.checked });
   });
 
   toggleKeyboardZoom.addEventListener('change', () => {
     const enabled = toggleKeyboardZoom.checked;
     kbdBindings.style.display = enabled ? 'grid' : 'none';
-    chrome.storage.sync.set({ keyboardZoomEnabled: enabled });
+    safeSyncSet({ keyboardZoomEnabled: enabled });
   });
 
   toggleKeyboardPan.addEventListener('change', () => {
     const enabled = toggleKeyboardPan.checked;
     kbdPanOptions.style.display = enabled ? 'block' : 'none';
-    chrome.storage.sync.set({ keyboardPanEnabled: enabled });
+    safeSyncSet({ keyboardPanEnabled: enabled });
   });
 
   kbdPanModifier.addEventListener('change', () => {
-    chrome.storage.sync.set({ keyboardPanModifier: kbdPanModifier.value });
+    safeSyncSet({ keyboardPanModifier: kbdPanModifier.value });
   });
 
   keyboardPanStep.addEventListener('input', () => {
     const val = Number(keyboardPanStep.value);
     keyboardPanStepVal.textContent = `${val}px`;
-    chrome.storage.sync.set({ keyboardPanStep: val });
+    safeSyncSet({ keyboardPanStep: val }, 250);
+  });
+
+  keyboardPanStep.addEventListener('change', () => {
+    const val = Number(keyboardPanStep.value);
+    safeSyncSet({ keyboardPanStep: val }, 0);
   });
 
   function startRecording(target, btn) {
@@ -351,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const entry = bindings[recordingTarget];
     if (entry) {
       entry.combo = combo;
-      chrome.storage.sync.set({ [entry.storageKey]: combo });
+      safeSyncSet({ [entry.storageKey]: combo }, 0);
     }
 
     recordingTarget = null;
