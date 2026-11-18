@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Media Zoom Anywhere — Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          <line x1="11" y1="8" x2="11" y2="14"></line>
+          <line x1="8" y1="11" x2="14" y2="11"></line>
+        </svg>
+        <div class="logo-text">
+          <h1>Media Zoom Anywhere</h1>
+          <span class="version-tag">v1.0.2</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="langToggle" class="lang-btn" title="Switch language">EN</button>
+        <label class="switch">
+          <input type="checkbox" id="toggleEnabled" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </header>
+
+    <main class="content">
+      <!-- Section 1: General & Zooming -->
+      <section class="card">
+        <h2 class="section-title" data-i18n="secGeneral">General & Zoom Settings</h2>
+        
+        <div class="setting-row">
+          <div class="setting-info">
+            <label for="modifierKey" class="setting-label" data-i18n="modifierLabel">Activation key:</label>
+            <p class="setting-desc" data-i18n="modifierDesc">Hold this key and scroll the mouse wheel over photos or videos to zoom.</p>
+          </div>
+          <select id="modifierKey">
+            <option value="ctrl" data-i18n="optCtrl">Ctrl / Cmd ⌘ (default)</option>
+            <option value="alt" data-i18n="optAlt">Alt / Option ⌥</option>
+            <option value="shift" data-i18n="optShift">Shift</option>
+          </select>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="label-with-value">
+              <label for="zoomSpeed" class="setting-label" data-i18n="zoomSpeedLabel">Zoom speed:</label>
+              <span id="zoomSpeedVal" class="value-badge">35%</span>
+            </div>
+            <p class="setting-desc" data-i18n="zoomSpeedDesc">Scaling multiplier per wheel notch. Supports speeds up to 300%.</p>
+          </div>
+          <input type="range" id="zoomSpeed" min="1.05" max="4.00" step="0.01" value="1.35">
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="label-with-value">
+              <label for="maxZoom" class="setting-label" data-i18n="maxZoomLabel">Max zoom:</label>
+              <span id="maxZoomVal" class="value-badge">15x</span>
+            </div>
+            <p class="setting-desc" data-i18n="maxZoomDesc">Upper limit for media magnification.</p>
+          </div>
+          <input type="range" id="maxZoom" min="2" max="25" step="1" value="15">
+        </div>
+
+        <div class="setting-row toggle-row">
+          <div class="setting-info">
+            <label for="toggleHideScrollbars" class="setting-label" data-i18n="hideScrollbarsLabel">Hide scrollbars when zoomed</label>
+            <p class="setting-desc" data-i18n="hideScrollbarsDesc">Prevents browser scrollbars from appearing during media scaling.</p>
+          </div>
+          <label class="switch switch-sm">
+            <input type="checkbox" id="toggleHideScrollbars" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row toggle-row">
+          <div class="setting-info">
+            <label for="toggleResetOnMediaChange" class="setting-label" data-i18n="resetOnMediaChangeLabel">Reset focus on media change</label>
+            <p class="setting-desc" data-i18n="resetOnMediaChangeDesc">Automatically returns zoom to 100% when switching slides, carousel images, or videos.</p>
+          </div>
+          <label class="switch switch-sm">
+            <input type="checkbox" id="toggleResetOnMediaChange" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Section 2: Video Expansion -->
+      <section class="card">
+        <h2 class="section-title" data-i18n="secVideo">Video Expansion Settings</h2>
+
+        <div class="setting-row toggle-row">
+          <div class="setting-info">
+            <label for="toggleExpandPreviewVideos" class="setting-label" data-i18n="expandPreviewVideosLabel">Expand preview video outside frame</label>
+            <p class="setting-desc" data-i18n="expandPreviewVideosDesc">Allows hover preview videos in feeds (YouTube, X/Twitter, etc.) to break out of their card frame over surrounding elements, just like photos.</p>
+          </div>
+          <label class="switch switch-sm">
+            <input type="checkbox" id="toggleExpandPreviewVideos">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row toggle-row">
+          <div class="setting-info">
+            <label for="toggleExpandPlayerVideos" class="setting-label" data-i18n="expandPlayerVideosLabel">Expand player video outside frame</label>
+            <p class="setting-desc" data-i18n="expandPlayerVideosDesc">Allows standalone and watch-page players (e.g. youtube.com/watch) to scale beyond the player frame while keeping controls on top.</p>
+          </div>
+          <label class="switch switch-sm">
+            <input type="checkbox" id="toggleExpandPlayerVideos">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Section 3: Keyboard Controls & Shortcuts -->
+      <section class="card">
+        <h2 class="section-title" data-i18n="secKeyboard">Keyboard Controls & Shortcuts</h2>
+
+        <div class="setting-row toggle-row">
+          <div class="setting-info">
+            <label for="toggleKeyboardZoom" class="setting-label" data-i18n="kbdZoomLabel">Keyboard zoom (center)</label>
+            <p class="setting-desc" data-i18n="kbdZoomDesc">Zoom into media using customizable key combinations without using the mouse wheel.</p>
+          </div>
+          <label class="switch switch-sm">
+            <input type="checkbox" id="toggleKeyboardZoom" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="kbd-bindings" id="kbdBindings">
+          <div class="kbd-field">
+            <span data-i18n="kbdInLabel">Zoom In</span>
+            <button type="button" id="bindZoomIn" class="kbd-btn">Ctrl + ↑</button>
+          </div>
+          <div class="kbd-field">
+            <span data-i18n="kbdOutLabel">Zoom Out</span>
+            <button type="button" id="bindZoomOut" class="kbd-btn">Ctrl + ↓</button>
+          </div>
+          <div class="kbd-field">
+            <span data-i18n="kbdPanUpLabel">Focus Up</span>
+            <button type="button" id="bindPanUp" class="kbd-btn">Ctrl + ←</button>
+          </div>
+          <div class="kbd-field">
+            <span data-i18n="kbdPanDownLabel">Focus Down</span>
+            <button type="button" id="bindPanDown" class="kbd-btn">Ctrl + →</button>
+          </div>
+        </div>
+
+        <div class="setting-row toggle-row" style="margin-top: 14px;">
+          <div class="setting-info">
+            <label for="toggleKeyboardPan" class="setting-label" data-i18n="kbdPanLabel">Pan with arrow keys</label>
+            <p class="setting-desc" data-i18n="kbdPanDesc">Navigate around zoomed media using directional arrows.</p>
+          </div>
+          <label class="switch switch-sm">
+            <input type="checkbox" id="toggleKeyboardPan" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="kbd-pan-options" id="kbdPanOptions">
+          <div class="setting-row">
+            <label for="kbdPanModifier" class="setting-label" data-i18n="panModifierLabel">Arrow key modifier:</label>
+            <select id="kbdPanModifier">
+              <option value="none" data-i18n="optPanNone">↑ ↓ ← → (Arrows only)</option>
+              <option value="shift" data-i18n="optPanShift" selected>Shift + ↑ ↓ ← →</option>
+              <option value="alt" data-i18n="optPanAlt">Alt + ↑ ↓ ← →</option>
+              <option value="ctrl" data-i18n="optPanCtrl">Ctrl / Cmd + ↑ ↓ ← →</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="label-with-value">
+                <label for="keyboardPanStep" class="setting-label" data-i18n="kbdPanStepLabel">Pan step:</label>
+                <span id="keyboardPanStepVal" class="value-badge">200px</span>
+              </div>
+              <p class="setting-desc" data-i18n="kbdPanStepDesc">Distance shifted on each arrow key press.</p>
+            </div>
+            <input type="range" id="keyboardPanStep" min="20" max="400" step="5" value="200">
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 4: Controls Reference -->
+      <section class="card">
+        <h2 class="section-title" data-i18n="controlsTitle">Controls (Windows / Mac)</h2>
+        <ul class="tips-list">
+          <li data-i18n-html="tipZoom"><strong>Ctrl (or Cmd ⌘) + Wheel</strong> — zoom in/out (or 2-finger Pinch on Mac trackpad).</li>
+          <li data-i18n-html="tipWheelPan"><strong>Normal Wheel</strong> (when zoomed) — smoothly pan up/down.</li>
+          <li data-i18n-html="tipShiftPan"><strong>Shift + Wheel</strong> — pan left/right.</li>
+          <li data-i18n-html="tipDrag"><strong>Left-click Drag</strong> — free pan anywhere.</li>
+          <li data-i18n-html="tipReset"><strong>Double-click / Esc</strong> — reset zoom to 100%.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

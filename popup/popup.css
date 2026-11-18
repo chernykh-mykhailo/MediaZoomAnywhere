@@ -35,7 +35,49 @@ body {
 .header-actions {
   display: flex;
   align-items: center;
+  gap: 6px;
+}
+
+.icon-btn {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.icon-btn:hover {
+  color: #f8fafc;
+  border-color: #38bdf8;
+}
+
+.more-settings-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
+  padding: 8px 12px;
+  margin-top: 10px;
+  background-color: #1e293b;
+  color: #38bdf8;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.more-settings-btn:hover {
+  background-color: #273549;
+  border-color: #38bdf8;
+  color: #7dd3fc;
 }
 
 .lang-btn {

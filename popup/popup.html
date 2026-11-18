@@ -17,6 +17,12 @@
       <span>Media Zoom</span>
     </div>
     <div class="header-actions">
+      <button id="openOptionsBtn" class="icon-btn" title="Open Settings" aria-label="Open Settings">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
       <button id="langToggle" class="lang-btn" title="Switch language">EN</button>
       <label class="switch">
         <input type="checkbox" id="toggleEnabled" checked>
@@ -40,7 +46,7 @@
         <label for="zoomSpeed" data-i18n="zoomSpeedLabel">Zoom speed:</label>
         <span id="zoomSpeedVal">35%</span>
       </div>
-      <input type="range" id="zoomSpeed" min="1.05" max="2.00" step="0.01" value="1.35">
+      <input type="range" id="zoomSpeed" min="1.05" max="4.00" step="0.01" value="1.35">
     </div>
 
     <div class="setting-row">
@@ -51,99 +57,13 @@
       <input type="range" id="maxZoom" min="2" max="25" step="1" value="15">
     </div>
 
-    <div class="setting-row">
-      <div class="label-with-value">
-        <label for="keyboardPanStep" data-i18n="kbdPanStepLabel">Pan step:</label>
-        <span id="keyboardPanStepVal">200px</span>
-      </div>
-      <input type="range" id="keyboardPanStep" min="20" max="400" step="5" value="200">
-    </div>
-
-    <div class="setting-row kbd-section">
-      <div class="kbd-header">
-        <label for="toggleHideScrollbars" data-i18n="hideScrollbarsLabel">Hide scrollbars when zoomed:</label>
-        <label class="switch switch-sm">
-          <input type="checkbox" id="toggleHideScrollbars" checked>
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="setting-row kbd-section">
-      <div class="kbd-header">
-        <label for="toggleResetOnMediaChange" data-i18n="resetOnMediaChangeLabel">Reset focus on media change:</label>
-        <label class="switch switch-sm">
-          <input type="checkbox" id="toggleResetOnMediaChange" checked>
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="setting-row kbd-section">
-      <div class="kbd-header">
-        <label for="toggleExpandPreviewVideos" data-i18n="expandPreviewVideosLabel">Expand preview video outside frame:</label>
-        <label class="switch switch-sm">
-          <input type="checkbox" id="toggleExpandPreviewVideos">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="setting-row kbd-section">
-      <div class="kbd-header">
-        <label for="toggleExpandPlayerVideos" data-i18n="expandPlayerVideosLabel">Expand player video outside frame:</label>
-        <label class="switch switch-sm">
-          <input type="checkbox" id="toggleExpandPlayerVideos">
-          <span class="slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="setting-row kbd-section">
-      <div class="kbd-header">
-        <label for="toggleKeyboardZoom" data-i18n="kbdZoomLabel">Keyboard zoom (center):</label>
-        <label class="switch switch-sm">
-          <input type="checkbox" id="toggleKeyboardZoom" checked>
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="kbd-bindings" id="kbdBindings" style="display: grid;">
-        <div class="kbd-field">
-          <span data-i18n="kbdInLabel">Zoom In</span>
-          <button type="button" id="bindZoomIn" class="kbd-btn">Ctrl + ↑</button>
-        </div>
-        <div class="kbd-field">
-          <span data-i18n="kbdOutLabel">Zoom Out</span>
-          <button type="button" id="bindZoomOut" class="kbd-btn">Ctrl + ↓</button>
-        </div>
-        <div class="kbd-field">
-          <span data-i18n="kbdPanUpLabel">Focus Up</span>
-          <button type="button" id="bindPanUp" class="kbd-btn">Ctrl + ←</button>
-        </div>
-        <div class="kbd-field">
-          <span data-i18n="kbdPanDownLabel">Focus Down</span>
-          <button type="button" id="bindPanDown" class="kbd-btn">Ctrl + →</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="setting-row kbd-section">
-      <div class="kbd-header">
-        <label for="toggleKeyboardPan" data-i18n="kbdPanLabel">Pan with arrow keys:</label>
-        <label class="switch switch-sm">
-          <input type="checkbox" id="toggleKeyboardPan" checked>
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="kbd-pan-options" id="kbdPanOptions" style="display: block;">
-        <select id="kbdPanModifier">
-          <option value="none" data-i18n="optPanNone">↑ ↓ ← → (Arrows only)</option>
-          <option value="shift" data-i18n="optPanShift" selected>Shift + ↑ ↓ ← →</option>
-          <option value="alt" data-i18n="optPanAlt">Alt + ↑ ↓ ← →</option>
-          <option value="ctrl" data-i18n="optPanCtrl">Ctrl / Cmd + ↑ ↓ ← →</option>
-        </select>
-      </div>
-    </div>
+    <button type="button" id="moreSettingsBtn" class="more-settings-btn">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      <span data-i18n="moreSettingsLabel">More Settings...</span>
+    </button>
 
     <div class="tips">
       <div class="tip-title" data-i18n="controlsTitle">Controls (Windows / Mac):</div>
